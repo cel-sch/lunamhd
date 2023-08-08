@@ -1,0 +1,12 @@
+profparam = mach = 0.05
+profparam = beta0 = 0.054
+param = n = -1
+param = B0 = 1
+param = R0 = 1/0.3
+param = r0 = 1
+param = D = 0
+param = Tr = 0
+param = El = 0
+profparam = rs = 0.3
+profparam = q0 = 0.868
+profshape = nu_q = 2.

@@ -1,0 +1,44 @@
+from Condition_Initiales import Initial_cond
+from math import *
+import matplotlib.pyplot as plt
+import numpy as np
+#Hi celine this plots the different growth rates if you change testo, you can ignore the rest it was just a lot of tests
+axe = np.linspace(0, 0.08, 1000)
+#axe = 0
+#x = np.linspace(0, 0.56419,100)
+testo = np.load("Sideband01.npz")
+'''
+INITIAL_COND EST UNE CLASSE QUI CALCULE LE GROWTH RATE AVEC LES CONDITIONS INITIALES ET LA FORMULE DE WHALBERG ELLE PRENDS EN ARGUMENT DANS L'ORDRE SUIVNAT:
+sigma1    sigma2     V0/VA (vecteur)     r1/a     epsilona      B0       Beta0      rho0        q0        lambda(q profile [1.5 6])       epsilonrho        epsilonomega         rhoprofile(parab ou flat)        omegaprofile(parab ou flat)  
+'''
+
+#test = Initial_cond(0, 0, axe, 0.30, 0.3, 1, 0.056, 1, 0.938, 2, 0.3, 0.3, 0.3, "rho_parab", "omega_flat")
+#test1 = Initial_cond(1, 1, axe, 0.38, 0.3, 1, 0.0325, 1, 0.9, 2, 0.3, 0.3, 0.18, "rho_parab", "omega_flat")
+#test2 = Initial_cond(1, 1, axe, 0.30, 0.3, 1, 0.056, 1, 0.938, 2, 0.3, 0.5j, 0.3, "rho_parab", "omega_parab")
+#test3 = Initial_cond(1, 1, axe, 0.30, 0.3, 1, 0.054, 1, 0.868, 2, 0.3, 0.3j, 0.3, "rho_flat", "omega_flat")
+#test4 = Initial_cond(1, 1, axe, 0.30, 0.3, 1, 0.056, 1, 0.88, 2, 0.3, 0.3, 0.3, "rho_parab", "omega_flat")
+plt.figure()
+#print(test4.c())
+#plt.plot(test.get_axe(), test.growth_rate())
+#plt.plot(x*1.772454,test1.omega_profile(x))
+#plt.plot(test1.get_axe(), test1.growth_rate(),'--', label='Analytical result pf')
+#plt.plot(test2.get_axe(), test2.growth_rate(),'--', label='Analytical result pp')
+#plt.plot(test3.get_axe(), test3.growth_rate(),'--', label='Analytical result fp')
+#plt.plot(test4.get_axe(), test4.growth_rate(),'--', label='Analytical result ff')
+#plt.plot(test1.get_axe(), test1.growth_rate_simp(), '--', label='Analytical result simp pp')
+#plt.plot(test2.get_axe(), test2.growth_rate_simp(), '--', label='Analytical result simp pp')
+#plt.plot(test3.get_axe(), test3.growth_rate_simp(), '--', label='Analytical result fp')
+#plt.plot(test4.get_axe(), test4.growth_rate_simp(), '--', label='Analytical result ff simp')
+#plt.plot(test.get_axe(), test.growth_rate_simp())
+plt.plot(testo["x"][0:47], testo["y"][0:47],'.-', label='Flat density - flat flow from Venus_MHD')
+plt.plot(testo["x"][0:47], testo["z"][0:47],'o--', label='Flat density - flat flow from analytical work')
+plt.xlabel("V0/VA")
+plt.ylabel(r'$\frac{\gamma}{\omega_A (0)}$')
+plt.legend()
+plt.grid()
+plt.savefig("sideband.pdf")
+#plt.savefig("ea02_Bp03_B024_q0938_r103a_epflat_eomegaflat.png")
+#plt.savefig("Failed.png")
+plt.show()
+#print(test1.rho_profile(0.16925))
+

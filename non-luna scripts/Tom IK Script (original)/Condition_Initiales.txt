@@ -1,0 +1,189 @@
+from math import *
+import numpy as np
+from scipy.integrate import solve_bvp
+from scipy.optimize import fsolve
+#Hi Celine Here is the script that gives the analytical growth rate
+class Initial_cond:
+    
+    def __init__(self, sigma1, sigma2, omega_axe, r1, epsilona, B0, Beta0, rho0, q0, lamb, epsilonrho, epsilonomega, betap0, rhoprofile, omegaprofile):
+        self.sigma1 = sigma1
+        self.sigma2 = sigma2
+        self.omega_axe = omega_axe
+        self.epsilona = epsilona
+        self.epsilonrho = epsilonrho
+        self.r1 = r1 / pi ** 0.5
+        self.a = 1 / pi ** 0.5
+        self.R0 = epsilona ** (-1) / pi ** 0.5
+        self.B0 = B0
+        self.rho0 = rho0
+        self.omega0 = 1
+        self.q0 = q0
+        self.lamb = lamb
+        self.rp = epsilonrho * self.R0
+        self.romega = epsilonomega * self.R0
+        self.betap0 = betap0
+        self.gamma = 5/3
+        self.mu0 = 4*pi*1.0E-7
+        self.P0 = (Beta0 * B0 ** 2) / (2 * self.mu0)
+        self.rhoprofile = rhoprofile
+        self.omegaprofile = omegaprofile
+        self.cnum = True
+
+    def deltaq(self):
+        return 1 - self.q0
+
+    def p_profile(self, r):
+        return self.P0 * (1 - (r/self.a)**2)
+
+    def rho_profile(self, r):
+        if self.rhoprofile == "rho_parab":
+            return self.rho0 * (1 - (r/self.rp)**2)
+        elif self.rhoprofile == "rho_flat":
+            return self.rho0
+        else:
+            print("unknown density profile add it please")
+            return self.rho0
+
+    def omega_profile(self, r):
+        if self.omegaprofile == "omega_parab":
+            return self.omega0 * (1 - (r/self.romega)**2)
+        elif self.omegaprofile == "omega_flat":
+            return self.omega0
+        else:
+            print("unknown flow profile add it please")
+            return self.omega0
+
+    def q_profile(self, r):
+        return 1 - self.deltaq() * (1 - (r/self.r1)**self.lamb)
+
+    def der_q_profile(self, r):
+        return self.lamb * self.deltaq() * r ** (self.lamb - 1) / (self.r1 ** self.lamb)
+
+    def Frho(self):
+        return self.rho_profile(self.r1)/(self.rho0)
+    
+    def Fp(self):
+        return self.p_profile(self.r1)/(self.P0)
+
+    def Fomega(self):
+        return self.omega_profile(self.r1)/self.omega0
+
+    def beta0(self):
+        return 2 * self.mu0 * self.P0 / self.B0 ** 2
+
+    def epsilon1(self):
+        return self.r1/self.R0
+
+    def s1(self):
+        return self.r1 * self.der_q_profile(self.r1)
+
+    def sigma(self):
+        return (self.lamb * self.deltaq()) * (1 + ((3 * self.lamb * self.deltaq())/(2 * (2 + self.lamb)))) / (2 * (4 + self.lamb))
+
+    def b(self):
+        return 1 + ((self.lamb * 4 * self.deltaq()) * (1 + ((2 * self.lamb * self.deltaq() * (3 + self.lamb))/((2 + self.lamb) * (4 + self.lamb)))) / (4 + self.lamb))
+
+    def f1(self, x):
+        return 4 * x / (4 - x)
+
+    def f2(self, x):
+        return (x ** 3) * (3 - x)/(2 - x)
+
+    def f4(self, x):
+        if x==1:
+            return - (4 * x / (4 - x)) - (4 * x / (2 - x))
+        else:
+            return - (4 * x / (4 - x)) - (4 * x /(2 - x)) - (4 * (3 - x)/(1 - x))
+
+    def Equation(self,r,Y,m,n):
+        Xi = Y[0]
+        dXi = Y[1]
+        q_ = self.q_profile(r)
+        dq_ = self.der_q_profile(r)
+        k = m/q_-n
+        dk = -m*dq_/(q_*q_)
+        d2Xi = (-3./r-2.*dk/k)*dXi+(m*m-1.)/r**2.*Xi
+
+        return np.vstack((dXi,d2Xi))
+        
+        
+    def c(self):
+        if self.cnum == True:
+            d = 1.0E-08
+            N = 1000
+            n = 1
+            m = 2
+            r2 = self.r1*((1.+self.deltaq())/self.deltaq())**(1./self.lamb)
+            Fguess = np.ones((2,N))
+            if r2 < self.a:
+                r = np.linspace(self.r1,r2-d,N)
+                Solution = solve_bvp(fun=lambda t,y: self.Equation(t,y,m,n), bc=lambda ya,yb: np.array((ya[0]-1.,yb[1])),x=r,y=Fguess)
+            else:
+                r = np.linspace(self.r1,self.a,N)
+                Solution = solve_bvp(fun=lambda t,y: self.Equation(t,y,m,n), bc=lambda ya,yb: np.array((ya[0]-1.,yb[0])),x=r,y=Fguess)
+            return self.r1*Solution.sol(self.r1)[1]/Solution.sol(self.r1)[0]
+        else:
+            if self.lamb == 2:
+                return - 3 / (1 + 4 * self.deltaq() - 8 * self.deltaq() ** 2 * np.log(self.deltaq()))
+            elif self.lamb == 4:
+                return - 9 / (3 + 4 * self.deltaq() * (5 - 3 * np.log(self.deltaq()) + 24 * self.deltaq()))
+            else:
+                return - (3 / (1 + self.f1(self.lamb) * self.deltaq() + self.f2(self.lamb) * (self.deltaq() ** 2) + self.f4(self.lamb) * (self.deltaq() ** (4/self.lamb))))
+
+    def epsilonomega2(self):
+        return (self.romega ** 2) / (self.R0 ** 2)
+
+    def epsilonp2(self):
+        return (self.rp ** 2) / (self.R0 ** 2)
+
+    def betap(self):
+        if self.omegaprofile == "omega_flat" and self.rhoprofile == "rho_flat":
+            return self.betap0
+        elif self.omegaprofile == "omega_flat":
+            return self.betap0 + self.sigma2 * np.square(self.omega_axe) / (2 * self.epsilonp2())
+        elif self.rhoprofile == "rho_flat":
+            return self.betap0 + self.sigma2 * np.square(self.omega_axe) / self.epsilonomega2()
+        else:
+            return self.betap0 + self.sigma2 * np.square(self.omega_axe) * ((2 / self.epsilonomega2()) + (1 / self.epsilonp2())) / 2
+
+    def deltabuss(self):
+        return ((32 * (self.b() - self.c()) * self.sigma() + 9 * (self.b() - 1) * (1 - self.c())) / (64 * (self.b() - self.c()))) - ((self.betap() + self.sigma()) * (3 * (self.b() - 1) * (self.c() + 3) ) / (8 * (self.b() - self.c()))) - ((self.betap() + self.sigma()) ** 2) * ((self.b() + 3) * (self.c() + 3)) / (4 * (self.b() - self.c()))
+
+    def deltabusssimp(self):
+        return self.deltaq() * ((13/48) - 3 * self.betap() ** 2) + (self.deltaq() ** 2) * ((5/32) - ((5 * self.betap())/2) + (6 * (1 + np.log(self.deltaq())) * (self.betap() ** 2)))
+
+    def deltarot1(self):
+        if self.omegaprofile == "omega_flat" and self.rhoprofile == "rho_flat":
+            return 0
+        elif self.omegaprofile == "omega_flat":
+            return - np.square(self.omega_axe) / (2 * self.epsilonp2())
+        elif self.rhoprofile == "rho_flat":
+            return np.square(self.omega_axe) / self.epsilonomega2()
+        else:
+            return np.square(self.omega_axe) * ((2 / self.epsilonomega2()) - (1 / self.epsilonp2())) / 2
+
+    def deltarot2(self):
+        if self.omegaprofile == "omega_flat" and self.rhoprofile == "rho_flat":
+            return 0
+        elif self.omegaprofile == "omega_flat":
+            return (self.sigma2 - 1) * self.betap() * np.square(self.omega_axe) / self.epsilonp2()
+        elif self.rhoprofile == "rho_flat":
+            return (self.sigma2 - 1) * self.betap() * np.square(self.omega_axe) * (2 / self.epsilonomega2())
+        else:
+            return (self.sigma2 - 1) * self.betap() * np.square(self.omega_axe) * ((2 / self.epsilonomega2()) + (1 / self.epsilonp2()))
+
+    def delta(self):
+        return self.deltabuss() + self.deltarot1() + self.deltarot2()
+
+    def deltasimp(self):
+        return self.deltabusssimp() + self.deltarot1() + self.deltarot2() 
+
+    def growth_rate(self):
+        return (((pi ** 2 * self.delta() ** 2 * self.epsilon1() ** 4) / (3 * self.Frho() * self.s1() ** 2)) - ((2 * self.sigma1 * self.Frho() * self.Fomega() ** 4 * np.power(self.omega_axe, 4)) / (15 * self.Fp() * self.beta0()))) ** (0.5)
+
+    def get_axe(self):
+        return self.omega_axe
+
+    def growth_rate_simp(self):
+        return (((pi ** 2 * self.deltasimp() ** 2 * self.epsilon1() ** 4) / (3 * self.Frho() * self.s1() ** 2)) - ((2 * self.sigma1 * self.Frho() * self.Fomega() ** 4 * np.power(self.omega_axe, 4)) / (15 * self.Fp() * self.beta0()))) ** (0.5)
+

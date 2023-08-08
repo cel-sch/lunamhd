@@ -1,0 +1,14 @@
+scan = mach = [1,0,21]
+#vscan = mach = [0.0,1.0,11] + [1.025,1.1,4]
+profparam = beta0 = 0.005
+param = profile = 'density_T'
+param = n = -1
+param = RationalM = 2
+param = B0 = 1
+param = R0 = 10
+param = r0 = 1
+profparam = rs = 0
+profparam = qs = 2
+profparam = q0 = 2.01
+profparam = nu_q = 8
+profparam = drstep = 0.4
