@@ -1,0 +1,12 @@
+# Ignore VMEC files
+VMEC/*
+!VMEC/xvmec2000_flow_netcdf
+
+# Ignore output files
+Output/*
+
+# Ignore results (figures)
+Results/*
+
+# Ignore random asymptotic expansion files
+AEs/*
