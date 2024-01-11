@@ -174,6 +174,8 @@ class Solver(object):
             Omega = (1.-s**6)
             Omega = Omega/Omega[0]
             AH = np.polyfit(s2,Omega,11)[::-1]
+            # Set flow parameters to zero
+            #AH = np.zeros_like(s2) # doesn't work, VMEC won't run
             
             C.Flow.AH = AH # SET FLOW PROFILE
             C.Flow.bcrit = mach # SET FLOW MAGNITUDE
@@ -192,6 +194,7 @@ class Solver(object):
                     T = .5*(1 - np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
                     T = T/T[0]
                     AT = np.polyfit(s2,T,11)[::-1] # SET TEMPERATURE PROFILE
+                    #AT = np.zeros_like(s2) # doesn't work, VMEC won't run
                     C.Flow.AT = AT
                     
                     ### PRESSURE
@@ -220,9 +223,9 @@ class Solver(object):
                     C.Pressure.AM = AM # SET PRESSURE PROFILE
                     C.Pressure.PRES_SCALE = 1.
                     
-                    #C.Pressure.PMASS_TYPE = "'cubic_spline'"
-                    #C.Pressure.AM_AUX_S = s
-                    #C.Pressure.AM_AUX_F = PVMEC
+                    C.Pressure.PMASS_TYPE = "'cubic_spline'"
+                    C.Pressure.AM_AUX_S = s
+                    C.Pressure.AM_AUX_F = PVMEC
                     
             elif self.params['profile'] == 'temperature':
                 ### DENSITY
@@ -245,9 +248,9 @@ class Solver(object):
                 C.Pressure.AM = AM # SET PRESSURE PROFILE
                 C.Pressure.PRES_SCALE = 1.
                 
-                #C.Pressure.PMASS_TYPE = "'cubic_spline'"
-                #C.Pressure.AM_AUX_S = s
-                #C.Pressure.AM_AUX_F = PVMEC
+                C.Pressure.PMASS_TYPE = "'cubic_spline'"
+                C.Pressure.AM_AUX_S = s
+                C.Pressure.AM_AUX_F = PVMEC
             
         elif self.params['profile'] == 'rotation':
             ### ROTATION
@@ -304,7 +307,13 @@ class Solver(object):
         else:
         	print ('Insert a valid value for LRFP')
         	exit()
-        C.Current.AI = AI
+        
+        #C.Current.AI = AI
+        
+        C.Current.PIOTA_TYPE = "'cubic_spline'"
+        C.Current.AI_AUX_S = s
+        C.Current.AI_AUX_F = q
+        
         
         #Change some control parameters
         #======================================================================
@@ -418,7 +427,7 @@ class Solver(object):
             if EV_guess == None:
                 idx_rstep = find_nearest(stab.grid.S, self.profParams['rstep'])
                 #EV_guess = 1.0E-1 + (1.0j)*abs(n)*eq.Omega[idx_rstep]
-                EV_guess = 2E-1
+                EV_guess = 1E-1
                 EV_guess = EV_guess + (1.0j)*abs(n)*eq.Omega[0]
             #elif EV_guess == 'bad': #EV_guess.real < 1.0E-07
                 #idx_rstep = find_nearest(stab.grid.S, self.profParams['rstep'])
