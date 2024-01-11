@@ -5,7 +5,7 @@ Created on Mon Feb 13 13:11:19 2023
 @author: celin
 """
 
-import lunaSolverKH as lunsol
+import lunaSolverKH_test as lunsol
 import readh5 as rh5
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,39 +14,34 @@ import os
 ### BEGIN ###
 sol = lunsol.Solver()
 
-### CALCULATE NEW EIGENVALUES OR NOT? ###
+### INITIALISE NEW VMEC EQUILIBRIUM? ###
 sol.initialisers['RunVMEC'] = True
 if sol.initialisers['RunVMEC'] == False:
-    sol.VMEClabel = '0xe5eb62'
+    sol.VMEClabel = 'oldVMECrun' # if using an existing VMEC run, name of old run
 
-os.system(f'mkdir -p Output/KH/{sol.VMEClabel}') 
-#os.system(f'mkdir -p Output/KH')
+os.system(f'mkdir -p Output/{sol.VMEClabel}') 
+sol.out_filepath = f'Output/{sol.VMEClabel}'
+sol.in_filename = 'rhoP_test_KH.in'
 
-sol.out_filepath = f'Output/KH/{sol.VMEClabel}'
-#sol.out_filepath = f'Output/KH'
-sol.in_filename = 'vmec_test.in'
-
-runVENUS = True # if VENUS is run without VMEC, I think the same run name is used so old .npz files will be replaced unless VMEClabel is changed?
+runVENUS = True
 if runVENUS == False:
-    out_filename = '0xe5eb62.npz'
+    out_filename = '0x4a2257.npz'
+    out_file = f'{sol.out_filepath}/{out_filename}'
 else:
-    out_filename = 'blah.npz'    
-out_file = f'{sol.out_filepath}/{out_filename}'
-
+    out_file = None  
 
 ### SET INITIALISERS ###
-sol.initialisers['ToPlot'] = False
-sol.initialisers['EVg_type'] = 'polynom_EV'
+sol.initialisers['EVg_type'] = 'polynom_EV' # pick eigenvalue guess method
+sol.initialisers['ToPlot'] = True # plot the VMEC profiles, EV and EF
+# NOTE: setting ToPlot to True will interrupt the VENUS scan?
 
 ### LOAD DATA ###
 data = sol.getData(dataFile = out_file, runSol = runVENUS)
 
 ### PLOT DATA ###
-fig5 = False
-AEs = False
 plotEigs = True
 plotEigGuess = False
-plotEigFuncs = True
+plotEigFuncs = True # plots first and last eigenfunction from scan for sanity checking
 
 if plotEigs:
     ws = data['eigenvals']
@@ -64,27 +59,12 @@ if plotEigs:
         
         x = Omega
         xlabel = 'Omega'
-        if fig5: ### Figure 5 ###
-            mach5, gam5 = np.loadtxt('AEs/gam_fig5.txt', dtype=(np.cfloat)).transpose()
-            gam5 = [i.real*eps_a for i in gam5] # eps_a normalisation removed to match VENUS normalisation
-            Omega5 = [i.real*np.sqrt(betahat) for i in mach5]
-        if AEs:
-            aeName = '0xbd1b8b'
-            aeFile = np.load(f'AEs/{aeName}.npz', allow_pickle = True)
-            
-            aegams = [i.imag*eps_a for i in aeFile['eigenvals']]
-            a_aegams = [i.imag*eps_a for i in aeFile['asy_eigenvals']]
-            aex = aeFile['scanvals']
     else:
         x = data['scanvals']
         xlabel = data['scanparams']
     
     fig, ax = plt.subplots()
     ax.plot(x[:], gams[:], '-x',label='VENUS-MHD $\hat{γ}$')
-    if fig5:
-        ax.plot(Omega5[:13], gam5[:13], '-.', label='2013 PPCF $\hat{γ}$')
-    if AEs:
-        ax.plot(aex[23:], aegams[23:], '-.', label='step model $\hat{γ}$')
     if plotEigGuess:
         wsguess = data['eigenguesses']
         gamguess = [i.real for i in wsguess]
@@ -95,10 +75,10 @@ if plotEigs:
     if runVENUS == False:
         ax.set_title(f'{out_filename}'.replace('.npz',''))
     plt.grid()
-    if plotEigGuess or fig5 or AEs:
+    if plotEigGuess:
         plt.legend()
         
-if plotEigFuncs: # what is input name if VMEC not run but VENUS is?
+if plotEigFuncs: 
     Nscan = len(data['scanvals'])
     label = sol.VMEClabel
     

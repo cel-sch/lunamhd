@@ -4,6 +4,7 @@ Created on Mon Feb 13 13:11:19 2023
 
 @author: celin
 """
+# Script for producing VMEC input files
 
 import lunaSolverKH as lunsol
 import readh5 as rh5
@@ -16,14 +17,11 @@ sol = lunsol.Solver()
 
 ### CALCULATE NEW EIGENVALUES OR NOT? ###
 sol.initialisers['RunVMEC'] = True
-if sol.initialisers['RunVMEC'] == False:
-    sol.VMEClabel = '0xe5eb62'
 
-os.system(f'mkdir -p Output/KH/{sol.VMEClabel}') 
+os.system(f'mkdir -p Output/vmec_testing/{sol.VMEClabel}') 
 #os.system(f'mkdir -p Output/KH')
 
-sol.out_filepath = f'Output/KH/{sol.VMEClabel}'
-#sol.out_filepath = f'Output/KH'
+sol.out_filepath = f'Output/vmec_testing/{sol.VMEClabel}'
 sol.in_filename = 'vmec_test.in'
 
 runVENUS = True # if VENUS is run without VMEC, I think the same run name is used so old .npz files will be replaced unless VMEClabel is changed?
@@ -35,17 +33,14 @@ out_file = f'{sol.out_filepath}/{out_filename}'
 
 
 ### SET INITIALISERS ###
-sol.initialisers['ToPlot'] = False
+sol.initialisers['ToPlot'] = True
 sol.initialisers['EVg_type'] = 'polynom_EV'
 
 ### LOAD DATA ###
 data = sol.getData(dataFile = out_file, runSol = runVENUS)
 
 ### PLOT DATA ###
-fig5 = False
-AEs = False
 plotEigs = True
-plotEigGuess = False
 plotEigFuncs = True
 
 if plotEigs:
@@ -64,39 +59,18 @@ if plotEigs:
         
         x = Omega
         xlabel = 'Omega'
-        if fig5: ### Figure 5 ###
-            mach5, gam5 = np.loadtxt('AEs/gam_fig5.txt', dtype=(np.cfloat)).transpose()
-            gam5 = [i.real*eps_a for i in gam5] # eps_a normalisation removed to match VENUS normalisation
-            Omega5 = [i.real*np.sqrt(betahat) for i in mach5]
-        if AEs:
-            aeName = '0xbd1b8b'
-            aeFile = np.load(f'AEs/{aeName}.npz', allow_pickle = True)
-            
-            aegams = [i.imag*eps_a for i in aeFile['eigenvals']]
-            a_aegams = [i.imag*eps_a for i in aeFile['asy_eigenvals']]
-            aex = aeFile['scanvals']
     else:
         x = data['scanvals']
         xlabel = data['scanparams']
     
     fig, ax = plt.subplots()
     ax.plot(x[:], gams[:], '-x',label='VENUS-MHD $\hat{γ}$')
-    if fig5:
-        ax.plot(Omega5[:13], gam5[:13], '-.', label='2013 PPCF $\hat{γ}$')
-    if AEs:
-        ax.plot(aex[23:], aegams[23:], '-.', label='step model $\hat{γ}$')
-    if plotEigGuess:
-        wsguess = data['eigenguesses']
-        gamguess = [i.real for i in wsguess]
-        ax.plot(x, gamguess, '-x', label='EV guess')
     ax.set_ylabel('gamma')
     ax.set_xlabel(f'{xlabel}')
     ax.set_title(f'{sol.VMEClabel}') # not perfect
     if runVENUS == False:
         ax.set_title(f'{out_filename}'.replace('.npz',''))
     plt.grid()
-    if plotEigGuess or fig5 or AEs:
-        plt.legend()
         
 if plotEigFuncs: # what is input name if VMEC not run but VENUS is?
     Nscan = len(data['scanvals'])

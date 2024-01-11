@@ -13,8 +13,8 @@ from VenusMHDpy.Grid import GRID
 
 grid = GRID() # initialises a default grid
 
-#out_filepath = 'Output/KH/0xbd8206'
-#filename = '0xbd8206_0.hdf5'
+#out_filepath = 'Output/KH/0x24b7c7'
+#filename = '0x24b7c7_5.hdf5'
 
 #file = f'{out_filepath}/{filename}'
 

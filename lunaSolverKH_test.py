@@ -21,11 +21,12 @@ from VenusMHDpy.library import find_nearest
 
 class Solver(object):
     def __init__(self):
-        profiles = ['density_T', 'density_P', 'temperature', 'rotation']
-        self.params = {'profile':'density_T','R0':10., 'B0':1., 'r0':1., 'D':0., 'El':0., 'Tr':0., 'n':-1, 'RationalM':1,'MPOL':15, 'NTOR':0}
+        self.params = {'profile':'rotation','R0':10., 'B0':1., 'r0':1., 'D':0., 'El':0., 'Tr':0., 'n':-1, 'RationalM':1,'MPOL':15, 'NTOR':0}
+        # profiles = ['density_T', 'density_P', 'rotation']
+        # profile: determines which parameter steps are used
         self.profParams = {'rstep':0.5, 'drstep':0.15, 'n0':1, 'nu_n':2, 'mach':0.0, 'beta0':0.05, 'qr':1., 'rs':0.3, 'q0':0.938, 'qs':None, 'nu_q':2.}
         
-        self.initialisers = {'RunVMEC': True, 'RunStab': True, 'ToPlot': True, 'Peakedness': True, 'EVg_type': 'last_EV'}
+        self.initialisers = {'RunVMEC': True, 'RunStab': True, 'ToPlot': True, 'EVg_type': 'last_EV'}
         # EVg_type: determines what type of eigenvalue guessing system is used. 
         #'last_EV': last EV used as guess for next one, 'polynom_EV': polynomial fit used as guess for next one
         
@@ -56,7 +57,7 @@ class Solver(object):
         with open(fInput, 'r') as f:
             for line in f:
                 data = line.split(' = ')
-                if data[0] == 'scan': # do the things i want to do with scanned parameters
+                if data[0] == 'scan':
                     rangeSpecs = eval(data[2])
                     paramRange = np.linspace(rangeSpecs[0], rangeSpecs[1], rangeSpecs[2])
                     self.scanParams[f'{data[1]}'] = paramRange
@@ -68,37 +69,10 @@ class Solver(object):
                         paramRange = np.linspace(rangeSpecs[0], rangeSpecs[1], rangeSpecs[2])
                         fullParamRange = np.concatenate((fullParamRange, paramRange), axis=None)
                     self.scanParams[f'{data[1]}'] = fullParamRange
-                if data[0] == 'profparam': # do the things i want to do with profile parameters
+                if data[0] == 'profparam':
                     self.profParams[f'{data[1]}'] = eval(data[2])
-                if data[0] == 'param': # do the things i want to do with parameters
+                if data[0] == 'param':
                     self.params[f'{data[1]}'] = eval(data[2])
-                    
-    def _peakedness1(self, r, y):
-        # Simplified peakedness calculation
-        
-        dlprof = len(y)-99 # to force the length of y to match r
-        dldprof = len(y)-100
-        
-        prof = y[dlprof:] # profile is equal to array of values given, skip y(a) since prof needs to be same length as dprof
-        dprof = [i/j for i, j in zip(np.diff(y[dldprof:]), np.diff(r))]
-        
-        p1 = spi.trapezoid(r[1:]*dprof/prof)
-        
-        return p1
-    
-    def _peakedness2(self, r, y, xi):
-        # Takes an array as y input. 
-        # Potential improvement: profiles are approximated as polynomials --> use the actual polynomial derivative and stuff? But sometimes they're spline
-        
-        prof = y[1:] # profile is equal to array of values given, skip y(a) since prof needs to be same length as dprof
-        dprof = [i/j for i, j in zip(np.diff(y), np.diff(r))]
-        
-        print(len(xi))
-        print(len(r[1:]))
-        print(len(dprof))
-        p2 = spi.trapezoid(xi[1:]*r[1:]*dprof/prof)/max(xi)    
-        
-        return p2
             
     ### VMEC ##################################################################                    
     def _buildVMEC(self, labelnr = 0):
@@ -174,8 +148,6 @@ class Solver(object):
             Omega = (1.-s**6)
             Omega = Omega/Omega[0]
             AH = np.polyfit(s2,Omega,11)[::-1]
-            # Set flow parameters to zero
-            #AH = np.zeros_like(s2) # doesn't work, VMEC won't run
             
             C.Flow.AH = AH # SET FLOW PROFILE
             C.Flow.bcrit = mach # SET FLOW MAGNITUDE
@@ -194,7 +166,6 @@ class Solver(object):
                     T = .5*(1 - np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
                     T = T/T[0]
                     AT = np.polyfit(s2,T,11)[::-1] # SET TEMPERATURE PROFILE
-                    #AT = np.zeros_like(s2) # doesn't work, VMEC won't run
                     C.Flow.AT = AT
                     
                     ### PRESSURE
@@ -223,34 +194,10 @@ class Solver(object):
                     C.Pressure.AM = AM # SET PRESSURE PROFILE
                     C.Pressure.PRES_SCALE = 1.
                     
-                    C.Pressure.PMASS_TYPE = "'cubic_spline'"
-                    C.Pressure.AM_AUX_S = s
-                    C.Pressure.AM_AUX_F = PVMEC
-                    
-            elif self.params['profile'] == 'temperature':
-                ### DENSITY
-                n0 = self.profParams['n0']
-                n_ = n0*np.ones_like(s)
-                
-                ### TEMPERATURE
-                T = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
-                T = T/T[0]
-                AT = np.polyfit(s2,T,11)[::-1] # SET TEMPERATURE PROFILE
-                C.Flow.AT = AT
-                
-                ### PRESSURE
-                beta0 = self.profParams['beta0']
-                P0 = beta0*B0**2*n_*T/(2*mu0*n0)
-                P = .5*P0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-                
-                PVMEC = P*np.exp(-0.5*mach**2*Omega**2./T)
-                AM = np.polyfit(s2,PVMEC,11)[::-1]
-                C.Pressure.AM = AM # SET PRESSURE PROFILE
-                C.Pressure.PRES_SCALE = 1.
-                
-                C.Pressure.PMASS_TYPE = "'cubic_spline'"
-                C.Pressure.AM_AUX_S = s
-                C.Pressure.AM_AUX_F = PVMEC
+                    # trying to implement spline leads to 'Runtime Error: Factor is exactly singular' when trying to calculate EV
+                    #C.Pressure.PMASS_TYPE = "'cubic_spline'"
+                    #C.Pressure.AM_AUX_S = s # must match existing grid, I think
+                    #C.Pressure.AM_AUX_F = PVMEC 
             
         elif self.params['profile'] == 'rotation':
             ### ROTATION
@@ -307,13 +254,7 @@ class Solver(object):
         else:
         	print ('Insert a valid value for LRFP')
         	exit()
-        
-        #C.Current.AI = AI
-        
-        C.Current.PIOTA_TYPE = "'cubic_spline'"
-        C.Current.AI_AUX_S = s
-        C.Current.AI_AUX_F = q
-        
+        C.Current.AI = AI
         
         #Change some control parameters
         #======================================================================
@@ -403,8 +344,6 @@ class Solver(object):
         eq.Normalise()
         eq.BuildInGrid(stab.grid)
     	
-    	#eq.plot(stab.grid, show=True)
-    	
         V0_Va = np.sqrt(eq.M02*eq.mu0*eq.P0)/eq.B0
         print ('Parameters at the magnetic axis:')
         print ('   M0    = %.5f'%(np.sqrt(eq.M02)))
@@ -427,8 +366,8 @@ class Solver(object):
             if EV_guess == None:
                 idx_rstep = find_nearest(stab.grid.S, self.profParams['rstep'])
                 #EV_guess = 1.0E-1 + (1.0j)*abs(n)*eq.Omega[idx_rstep]
-                EV_guess = 1E-1
-                EV_guess = EV_guess + (1.0j)*abs(n)*eq.Omega[0]
+                gam_guess = 1E-1
+                EV_guess = gam_guess + (1.0j)*abs(n)*eq.Omega[0]
             #elif EV_guess == 'bad': #EV_guess.real < 1.0E-07
                 #idx_rstep = find_nearest(stab.grid.S, self.profParams['rstep'])
                 #EV_guess = 1.0E-3 + (1.0j)*abs(n)*eq.Omega[idx_rstep]
@@ -438,25 +377,7 @@ class Solver(object):
             print ('Solution time: %.4E with N = %i' %(time.time()-t0, stab.grid.N))
     		#------------------------------------------------------------------
     
-            EV = max(stab.Solution.vals)
-            
-            # Calculate peakedness
-            s2 = np.linspace(0.,1.,100) # grid
-            if self.initialisers['Peakedness']:
-                if self.params['profile'] in ['density_T', 'density_P']:
-                    #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
-                    mu0 = 4.*np.pi*1.0E-07
-                    dens = eq.P*2*mu0/(eq.beta0*eq.B0**2*eq.T) # normalised density
-                    pkedness = self._peakedness1(s2, dens)                        
-                elif self.params['profile']=='temperature':
-                    #pkedness = self._peakedness2(s2, self.Tpoly, xi)
-                    pkedness = self._peakedness1(s2, eq.T)
-                elif self.params['profile']=='rotation':
-                    #pkedness = self._peakedness2(s2, self.rotpoly, xi)
-                    pkedness = self._peakedness1(s2, eq.Omega)
-                else:
-                    print('PROFILE IS NOT SET TO ONE OF THE ESTABLISHED STEPPED PROFILES.')
-            
+            EV = max(stab.Solution.vals)            
     		
             print ('Most unstable eigenvalue')
             print ('(Gamma/OmegaA) = %.5E + i(%.5E)'%(EV.real,EV.imag))
@@ -520,14 +441,6 @@ class Solver(object):
                                 EV_guess += 1E-3*(EV_guess.real + 1j*EV_guess.imag) # if the polyfit is struggling, take last calculated growth rate as guess for current one and move a little to the right
                         else:
                             EV_guess = None
-                    
-                    """
-                    if idx >= 1:
-                        EV_guess = ws[idx-1]
-                        #EV_guess += 1E-2*(EV_guess.real + 1j*EV_guess.imag)
-                    else:
-                        EV_guess = None # sets EV_guess = default in runVENUS
-                    """
                         
                     sol = self._runVENUS(EV_guess, idx, labelnr=idx)
                     w = sol[0]
@@ -651,69 +564,8 @@ class Solver(object):
                 writer.writerow(self.params)
                 
         return fOutput
-    
-    ### FIX OUTPUT GRID #######################################################
-    # Not sure if these make sense as class functions
-    def updateOutGrid(self):
-        """
-        If run, removes entries which have been removed from Output folder from
-        outputs.csv (these are presumed deleted).
-        Currently can't detect/account for if something has been moved.
-        
-        Doesn't account very well for the fact that different runs may have 
-        different lengths due to different numbers of parameters saved.
-        """
-        
-        outputGrid = 'Output/outputs.csv'
-        #csv_columns = ['ID', 'filepath', 'profile', 'y0', 'y1', 'Omega', 'm', 'n', 'beta', 'delq', 'r0', 'a', 'Gamma', 'eps_a', 'thEff', 'scanlabel', 'scanparams', 'scanvals', 'time']
-        
-        lines = []
-        with open(outputGrid, 'r', newline='') as f:
-            reader = csv.DictReader(f)
-            headers = reader.fieldnames
-            
-            for row in reader:
-                filename = row['ID']
-                filepath = row['filepath']
-                if os.path.isfile(f'{filepath}/{filename}.npz'): # checks if file is loose in outputs dir
-                    lines.append(row)
-                elif os.path.isdir(f'{filepath}/{filename}'):
-                    lines.append(row)
-                else:
-                    print(f'run {filename} has been deleted')
-                    
-        with open(outputGrid, 'w', newline='') as f: # re-write the csv grid file
-            writer = csv.DictWriter(f, headers)
-            writer.writeheader()
-            for row in lines:
-                # If there are keys in csv header that weren't saved into a given output file, set value for these keys to None
-                keycheck = [i for i in headers if i not in list(row.keys())]
-                for key in keycheck:
-                    row[f'{key}'] = None
-                    
-                writer.writerow(row)
-                
-    ### READ OUTPUT ###########################################################             
-    def remakeOutputGrid(self):
-        """
-        csv_columns needs updating
-        """
-        
-        outputGrid = 'Output/outputs.csv'
-        csv_columns = ['ID', 'filepath', 'profile', 'y0', 'y1', 'Omega', 'm', 'n', 'beta', 'delq', 'r0', 'a', 'Gamma', 'eps_a', 'thEff', 'scanlabel', 'scanparams', 'scanvals', 'time']
-        
-        npz_files = [f for f in os.listdir('Output') if f.endswith('.npz')]
-        
-        for file in npz_files:
-            data = f'Output/{file}'
-            data = np.load(data, allow_pickle = True)
-            outparams = data['outparams'].item()
-            
-            with open(outputGrid, 'w', newline='') as f:
-                writer = csv.DictWriter(f, csv_columns)
-                writer.writeheader()
-                writer.writerow(outparams)
-    
+
+    ### READ OUTPUT ###########################################################                 
     def getData(self, dataFile = None, runSol = True):
         """
         Runs the solvers and unpacks the output file.
@@ -725,7 +577,7 @@ class Solver(object):
             the data. dataFile should include file location.
         """
         
-        if runSol:
+        if dataFile is None:
             self._readInput()        
             data = self._buildOutput()
         else:
