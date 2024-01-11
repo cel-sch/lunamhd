@@ -1,5 +1,4 @@
-scan = mach = [2.5,0,13]
-#vscan = mach = [1.1,1.025,4] + [1,0,11]
+param = mach = 0
 profparam = beta0 = 0.005
 param = profile = 'density_P'
 param = n = -1
