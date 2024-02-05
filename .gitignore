@@ -8,5 +8,9 @@ Output/*
 # Ignore results (figures)
 Results/*
 
-# Ignore random asymptotic expansion files
+# Ignore random other folders
 AEs/*
+non-luna-scripts/*
+
+# Ignore random python files
+__pycache__/*

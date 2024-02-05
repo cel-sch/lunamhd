@@ -11,6 +11,7 @@
    r0 = 1
    n = -1
    RationalM = 2
+   sidebands = 5
    B0 = 1
    rs = 0
    qs = 2

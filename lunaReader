@@ -1,0 +1,90 @@
+import numpy as np
+import scipy.integrate as spi
+from pathlib import Path
+from copy import deepcopy
+
+class lunaRead(object):
+    def __init__(self, filename, filePath = None):
+        self.filename = filename
+        if filePath is None:
+                filePath = Path(f'/users/cs2427/scratch/AEmhd/{filename}') # for running on viking
+                #filePath = Path.cwd() / 'Output' # for running locally
+        else:
+            filePath = Path(filePath)
+        self.dataFile = filePath / f'{filename}.npz'
+        self._get_run_data()
+
+    def __call__(self, variable, paramSpecs):
+        #print(f'paramSpecs={paramSpecs}, variable={variable}') # these print correctly
+        scankey, pointkey = self.get_point_label(paramSpecs=paramSpecs)
+        if pointkey:
+            scan = self.data[scankey]
+            for key in scan[pointkey].keys():
+                if key == variable:
+                    return scan[pointkey][key]
+                elif type(scan[pointkey][key]) == dict:
+                    for skey in scan[pointkey][key].keys():
+                        if skey == variable:
+                            return scan[pointkey][key][skey]
+            print("ERROR: cannot find variable")
+            return
+        else:
+            return
+
+    def _get_run_data(self, dataFile = None):
+        if dataFile is None:
+            dataFile = self.dataFile
+        else:
+            self.dataFile = dataFile
+        raw_data = np.load(dataFile, allow_pickle = True)
+        info = raw_data['info'].item() # contains scanparams, timestamp
+        data = raw_data['data'].item() # {scan1:{data:{point1, point2, ...},info:info}, ...}
+        self.data = data  # data isn't building correctly
+        self.info = info
+        return
+
+    def get_1d_list(self, scanparam, variable, spar_list = None, paramSpecs = {}, _returnBoth = True):
+        # Returns a 1D list of variable values 
+        # variable: the variable values of which are being looked up
+        # scanparam: the value over which was scanned
+        # spar list: if only want the variable values for certain specific scanparam values, specify those here
+        # paramSpecs: any additional parameter specifications (e.g. if scan was over omega and delq, could specify which delq here) (?)
+        if spar_list is None:
+            spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
+        else:
+            spar_list = list(spar_list)
+            
+        var_list = []
+        for p in spar_list:
+            paramSpecs = deepcopy(paramSpecs)
+            paramSpecs[scanparam] = p # successfully sets 'omega:2' in paramSpecs dict
+            var_list.append(self(variable, paramSpecs))
+        if _returnBoth:
+            return spar_list, var_list
+        else:
+            return var_list
+
+    def get_point_label(self, paramSpecs):
+            # NOTE: this relies on ordered dictionaries and will not work for python versions older than 3.6
+            # Currently only returns the first point matching the paramSpecs given.
+            initparam = self.info['scanorder'][0]
+            if initparam in paramSpecs.keys(): # move initparam to beginning of dict
+                paramSpecs = {f'{initparam}':paramSpecs.pop(initparam), **paramSpecs}
+                
+            for scankey, scan in self.data.items():
+                for pointkey, point in scan.items():
+                    isrun = True
+                    for var, val in paramSpecs.items():
+                        if point['params'][var] != val:
+                            isrun = False
+                        #else: isrun = True breaks things to always pick the same point, unsure why
+                    if isrun:
+                        return scankey, pointkey
+            print("ERROR: Could not find run")
+            # This doesn't currently work and returns None
+            return None
+    
+    def print_run_info(self):
+        for key, val in self.info.items():
+            print(f"{key}: val")
+    

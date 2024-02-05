@@ -40,14 +40,17 @@ class lunaScan(object):
             self.inputfile = 'default_KH.in'
         self.inputpath = inputpath
         if self.inputpath is None:
-            self.inputpath = f'/users/cs2427/lunamhd/Input/{self.inputfile}'
+            #self.inputpath = f'/users/cs2427/lunamhd/Input/{self.inputfile}'
+            self.inputpath = f'/home/csch/VENUS-linux/venusmhdpy-library/lunamhd/Input/{self.inputfile}'
         else:
             self.inputpath = self.inputpath + '/' + self.inputfile
         ### Define output path for the final scan npz
         if self['mode_type'] == 'KH':
-            self.outpath = Path('/users/cs2427/scratch/lunamhd/KH') # for running on viking
+            #self.outpath = Path('/users/cs2427/scratch/lunamhd/KH') # for running on viking
+            self.outpath = Path('/home/csch/VENUS-linux/venusmhdpy-library/lunamhd/Output/KH')
         elif self['mode_type'] == 'IK':
-            self.outpath = Path('/users/cs2427/scratch/lunamhd/IK')
+            #self.outpath = Path('/users/cs2427/scratch/lunamhd/IK') # for running on viking
+            self.outpath = Path('/home/csch/VENUS-linux/venusmhdpy-library/lunamhd/Output/IK')
         #self.outpath = 'Output' # for running locally
 
     def __getitem__(self, key):
@@ -157,27 +160,27 @@ class lunaScan(object):
             f.writelines(self.scan_ids)
 
     def init_run(self, runid = None):
-    # Initialises a run.
-    # If no runid is provided, a run name is generated from the scan params.
-    self._readinput()
-    if runid is None:
-        runid = self._build_run_name(self.scanorder)
-    self.runid = runid
-    self.VMEClabel = self.runid
-    self.scans = self._make_scan_list()
-    self._make_scan_inputs()
-    self._write_scan_dirs()
-    return
+        # Initialises a run.
+        # If no runid is provided, a run name is generated from the scan params.
+        self._readinput()
+        if runid is None:
+            runid = self._build_run_name(self.scanorder)
+        self.runid = runid
+        self.VMEClabel = self.runid
+        self.scans = self._make_scan_list()
+        self._make_scan_inputs()
+        self._write_scan_dirs()
+        return
 
     def init_scan(self, runid = None):
-    # Initialises a scan. Skips some of the run initialisation steps which don't
-    # need duplicating.
-    self._readinput()
-    if runid is None:
-        runid = self._build_run_name(self.scanorder)
-    self.runid = runid
-    self.VMEClabel = self.runid
-    return
+        # Initialises a scan. Skips some of the run initialisation steps which don't
+        # need duplicating.
+        self._readinput()
+        if runid is None:
+            runid = self._build_run_name(self.scanorder)
+        self.runid = runid
+        self.VMEClabel = self.runid
+        return
             
     ###### VMEC ######
     def _build_VMEC_profile(self, param):
@@ -623,14 +626,13 @@ class lunaScan(object):
 
     def run(self, saveloc = None):
         if self.scans: # integrated ND scan
-        for scan in self.scans:
-            scanoutput = self.firstscan(scanid = self.runid)
-            self._save_scan(scanid = self.runid, scanoutput = scanoutput)
-        else: # 1D (or parallel ND) scan
-            scanoutput = self.firstscan(scanid = self.runid)
-            self._save_scan(scanid = self.runid, scanoutput = scanoutput, saveloc = saveloc)
-        
-    return
+            for scan in self.scans:
+                scanoutput = self.firstscan(scanid = self.runid)
+                self._save_scan(scanid = self.runid, scanoutput = scanoutput)
+            else: # 1D (or parallel ND) scan
+                scanoutput = self.firstscan(scanid = self.runid)
+                self._save_scan(scanid = self.runid, scanoutput = scanoutput, saveloc = saveloc)        
+        return
     
     ###### BUILD OUTPUT FILE ######
     def _get_scan_info(self, scanid = None):
@@ -663,7 +665,7 @@ class lunaScan(object):
             np.savez(fOut, data = scanoutput.copy(), info = scan_info.copy()) 
         return
 
-   def save_run(self, runid = None):
+    def save_run(self, runid = None):
         # needs something built in for if one scan doesn't converge it skips it
         # this doesn't take self.runid because saver.py doesn't make a self.runid
         # either need this to make a self.runid or? probably fine like this
@@ -699,8 +701,6 @@ class lunaScan(object):
         copy2(inputpath, saveloc)
         
         return # can save old runs if same input file (needs same scan parameters) and runid is provided using init_run
-        
-    ###### MISC ###### 
                     
 
         

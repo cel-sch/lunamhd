@@ -5,7 +5,7 @@ Created on Mon Jan  8 15:17:03 2024
 @author: celin
 """
 import argparse
-from luna-mhd import *
+from lunamhd import lunaScan
 
 parser = argparse.ArgumentParser(description='Read command line inputs to run AEscanner.')
 parser.add_argument('inputfile', type=str, help='input file containing run info e.g. default.in')
