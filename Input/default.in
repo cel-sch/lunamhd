@@ -1,0 +1,22 @@
+&config_nml
+   ToPlot = False
+   EV_guess_type = 'polynom_EV' # polynom_EV/last_EV
+   mode_type = 'KH' #KH/IK
+   scanparams = 'omega'
+   profile = 'rotation'
+   mach = 3., 0., 21
+   r0 = 0.5
+   beta = 0.018
+   R0 = 10
+   r0 = 1
+   n = -1
+   RationalM = 2
+   sidebands = 5
+   B0 = 1
+   rs = 0
+   qs = 2
+   q0 = 2.01
+   nu_q = 8
+   nu_n = 6
+   drstep = 0.25
+/
