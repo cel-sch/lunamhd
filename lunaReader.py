@@ -1,4 +1,5 @@
 import numpy as np
+import readh5 as rh5
 import scipy.integrate as spi
 from pathlib import Path
 from copy import deepcopy
@@ -7,8 +8,7 @@ class lunaRead(object):
     def __init__(self, filename, filePath = None):
         self.filename = filename
         if filePath is None:
-                filePath = Path(f'/users/cs2427/scratch/AEmhd/{filename}') # for running on viking
-                #filePath = Path.cwd() / 'Output' # for running locally
+                filePath = Path(f'/home/csch/VENUS-linux/lunamhd/Results/KH/{filename}')
         else:
             filePath = Path(filePath)
         self.dataFile = filePath / f'{filename}.npz'
@@ -43,6 +43,26 @@ class lunaRead(object):
         self.info = info
         return
 
+    def get_point_label(self, paramSpecs):
+        # NOTE: this relies on ordered dictionaries and will not work for python versions older than 3.6
+        # Currently only returns the first point matching the paramSpecs given.
+        initparam = self.info['scanorder'][0]
+        if initparam in paramSpecs.keys(): # move initparam to beginning of dict
+            paramSpecs = {f'{initparam}':paramSpecs.pop(initparam), **paramSpecs}
+            
+        for scankey, scan in self.data.items():
+            for pointkey, point in scan.items():
+                isrun = True
+                for var, val in paramSpecs.items():
+                    if point['params'][var] != val:
+                        isrun = False
+                    #else: isrun = True breaks things to always pick the same point, unsure why
+                if isrun:
+                    return scankey, pointkey
+        if not isrun:
+            print("ERROR: Could not find run")
+            return None
+
     def get_1d_list(self, scanparam, variable, spar_list = None, paramSpecs = {}, _returnBoth = True):
         # Returns a 1D list of variable values 
         # variable: the variable values of which are being looked up
@@ -57,32 +77,15 @@ class lunaRead(object):
         var_list = []
         for p in spar_list:
             paramSpecs = deepcopy(paramSpecs)
-            paramSpecs[scanparam] = p # successfully sets 'omega:2' in paramSpecs dict
+            paramSpecs[scanparam] = p 
             var_list.append(self(variable, paramSpecs))
         if _returnBoth:
             return spar_list, var_list
         else:
             return var_list
 
-    def get_point_label(self, paramSpecs):
-            # NOTE: this relies on ordered dictionaries and will not work for python versions older than 3.6
-            # Currently only returns the first point matching the paramSpecs given.
-            initparam = self.info['scanorder'][0]
-            if initparam in paramSpecs.keys(): # move initparam to beginning of dict
-                paramSpecs = {f'{initparam}':paramSpecs.pop(initparam), **paramSpecs}
-                
-            for scankey, scan in self.data.items():
-                for pointkey, point in scan.items():
-                    isrun = True
-                    for var, val in paramSpecs.items():
-                        if point['params'][var] != val:
-                            isrun = False
-                        #else: isrun = True breaks things to always pick the same point, unsure why
-                    if isrun:
-                        return scankey, pointkey
-            print("ERROR: Could not find run")
-            # This doesn't currently work and returns None
-            return None
+    def get_eigenfuncs(self, pointidx):
+        # need scanid
     
     def print_run_info(self):
         for key, val in self.info.items():

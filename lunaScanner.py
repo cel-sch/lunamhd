@@ -13,6 +13,7 @@ import time
 import random
 import f90nml as f90
 from pathlib import Path
+from shutil import copy2
 
 from VenusMHDpy import SATIRE2SFL
 from VenusMHDpy import Equilibriumh5
@@ -21,37 +22,41 @@ from VenusMHDpy import VMECInput
 from VenusMHDpy.library import find_nearest
 
 class lunaScan(object):
-    def __init__(self, inputfile = None, inputpath = None):
-        profiles = ['rhoT', 'rhoP', 'PT', 'rot']
-        self.params = {'profile':'rhoT', 'mach':0.0, 'beta0':0.05, 'R0':10., 'r0':1., 'B0':1., 'n':-1, 'RationalM':1, 'sidebands':5,
-                        'D':0., 'El':0., 'Tr':0., 'MPOL':15, 'NTOR':0, 'rstep':0.5, 'drstep':0.15, 
+    def __init__(self, runid = None, inputfile = None, inputpath = None):
+        profiles = ['rho_t', 'rho_p', 'pt', 'rot']
+        self.params = {'profile':'rho_t', 'mach':0.0, 'beta0':0.05, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5,
+                        'd':0., 'el':0., 'tr':0., 'mpol':15, 'ntor':0, 'rstep':0.5, 'drstep':0.15, 
                         'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'q0':0.938, 'qs':None, 'nu_q':2.}
         
-        self.initialisers = {'RunVMEC': True, 'RunStab': True, 'ToPlot': True, 'Peakedness': True, 
-                        'EV_guess_type': 'last_EV', 'mode_type':'KH'}
+        self.initialisers = {'run_vmec': True, 'run_venus': True, 'toplot': True, 'peakedness': True, 
+                        'ev_guess_type': 'last_ev', 'mode_type':'KH'}
         # EV_guess_type: determines what type of eigenvalue guessing system is used. 
-        #'last_EV': last EV used as guess for next one, 'polynom_EV': polynomial fit used as guess for next one
-        
-        self.scans = {}
+        #'last_ev': last EV used as guess for next one, 'polynom_ev': polynomial fit used as guess for next one
 
-        ### Define path to input file. Default is lunamhd/Input/default_KH.in
+        ### Define path to input file. Default is lunamhd/Input/default.in
         self.inputfile = inputfile
         if inputfile is None:
-            self.inputfile = 'default_KH.in'
+            self.inputfile = 'default.in'
         self.inputpath = inputpath
         if self.inputpath is None:
             #self.inputpath = f'/users/cs2427/lunamhd/Input/{self.inputfile}'
-            self.inputpath = f'/home/csch/VENUS-linux/venusmhdpy-library/lunamhd/Input/{self.inputfile}'
+            self.inputpath = f'/home/csch/VENUS-linux/lunamhd/Input/{self.inputfile}'
         else:
             self.inputpath = self.inputpath + '/' + self.inputfile
-        ### Define output path for the final scan npz
+        ### Define outpath
         if self['mode_type'] == 'KH':
             #self.outpath = Path('/users/cs2427/scratch/lunamhd/KH') # for running on viking
-            self.outpath = Path('/home/csch/VENUS-linux/venusmhdpy-library/lunamhd/Output/KH')
+            self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Results/KH')
         elif self['mode_type'] == 'IK':
             #self.outpath = Path('/users/cs2427/scratch/lunamhd/IK') # for running on viking
-            self.outpath = Path('/home/csch/VENUS-linux/venusmhdpy-library/lunamhd/Output/IK')
-        #self.outpath = 'Output' # for running locally
+            self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Output/IK')
+        
+        ### Essentially the contents of init_scan
+        self.scans = {}
+        self._readinput()
+        if runid is None:
+            runid = self._build_run_name(self.scanorder)
+        self.runid = runid
 
     def __getitem__(self, key):
         if key in self.params:
@@ -112,8 +117,8 @@ class lunaScan(object):
         # Makes subdirectory for a given scan, e.g. Output/run/beta=1/delq=0.1/
         # Only relevant for integrated ND scans, not parallel ND scans (which function
         # as several 1D scans)
-        saveloc = Path(f"{self.outpath}/{self.runid}")
-        scandir = Path.cwd() / saveloc
+        run_saveloc = Path(f"{self.outpath}/{self.runid}")
+        scandir = Path.cwd() / run_saveloc
         for param in scan:
             scandir = scandir / f'{param}_{scan[param]:.2f}'     
         return scandir
@@ -151,44 +156,22 @@ class lunaScan(object):
     def _write_scan_dirs(self):
         # Writes the scan subdir paths to a file 'scan_subdirs.txt'
         # Writes the scan IDs to a file 'scan_ids.txt'
-        saveloc = Path(f"{self.outpath}/{self.runid}")
-        inputs_list_file = saveloc / f'scan_subdirs.txt'
+        run_saveloc = Path(f"{self.outpath}/{self.runid}")
+        inputs_list_file = run_saveloc / f'scan_subdirs.txt'
         with open(inputs_list_file, 'w') as f:
             f.writelines(self.scan_subdirs)
-        scanids_list_file = saveloc / f'scan_ids.txt'
+        scanids_list_file = run_saveloc / f'scan_ids.txt'
         with open(scanids_list_file, 'w') as f:
             f.writelines(self.scan_ids)
 
-    def init_run(self, runid = None):
+    def init_run(self):
         # Initialises a run.
-        # If no runid is provided, a run name is generated from the scan params.
-        self._readinput()
-        if runid is None:
-            runid = self._build_run_name(self.scanorder)
-        self.runid = runid
-        self.VMEClabel = self.runid
         self.scans = self._make_scan_list()
         self._make_scan_inputs()
         self._write_scan_dirs()
         return
-
-    def init_scan(self, runid = None):
-        # Initialises a scan. Skips some of the run initialisation steps which don't
-        # need duplicating.
-        self._readinput()
-        if runid is None:
-            runid = self._build_run_name(self.scanorder)
-        self.runid = runid
-        self.VMEClabel = self.runid
-        return
             
     ###### VMEC ######
-    def _build_VMEC_profile(self, param):
-        # able to pick between spline or polynomial
-        # special conditions for e.g. density(?) needing to have nonzero bit
-        # can tell it which parameter and it produces the right variable?
-        return
-
     def _peakedness1(self, r, y):
         # Simplified peakedness calculation
         
@@ -216,17 +199,24 @@ class lunaScan(object):
         
         return p2
 
+    def _build_VMEC_profile(self, param):
+        # able to pick between spline or polynomial
+        # special conditions for e.g. density(?) needing to have nonzero bit
+        # can tell it which parameter and it produces the right variable?
+        return
+
     def _buildVMEC(self, idx = 0):
         
-        self.label_FIXED = f'{self.VMEClabel}_{idx}' #Name for 1 point in scan e.g. test_1. VMEClabel is runid, produced when init_run is run
+        self.label_FIXED = f'{self.runid}_{idx}' #Name for 1 point in scan e.g. test_1. VMEClabel is runid, produced when init_run is run
         
         #Read the default input file
-        C = VMECInput.ReadInputVMEC('/users/cs2427/lunamhd/VMEC/input/input.Default') # BUGFIX: will need to check if this works
+        #C = VMECInput.ReadInputVMEC('/users/cs2427/lunamhd/VMEC/input/input.Default') # BUGFIX: will need to check if this works
+        C = VMECInput.ReadInputVMEC('/home/csch/VENUS-linux/lunamhd/VMEC/input/input.Default') 
         
         #Modify some grid and control parameters, these get written to VMEC input
         #======================================================================
-        C.Grid.MPOL = self.params['MPOL']    #Number of poloidal modes used
-        C.Grid.NTOR = self.params['NTOR']    #Set 2D	
+        C.Grid.MPOL = self.params['mpol']    #Number of poloidal modes used
+        C.Grid.NTOR = self.params['ntor']    #Set 2D	
         C.Grid.LASYM = 'F'	#Weather or not to violate stellarator symmetry.
         C.Grid.NZETA = 16   #Number ot toroidal planes. Important in free boundary calculations
         C.Grid.LRFP = 'F'   #Weather to use toroidal (F) or poloidal (T) normalized flux as radial variable. Note that if poloidal flux is used, 'q' needs to be provided instead of 'iota'.
@@ -237,12 +227,12 @@ class lunaScan(object):
         #======================================================================
         mu0 = 4.*np.pi*1.0E-07
         e = 1.60217663E-19
-        R0 = self['R0']
-        B0  = self['B0']
-        r0 = self['r0']
-        D = self['D']  #Shafranov Shift
-        El = self['El'] #Elongation
-        Tr = self['Tr'] #Triangularity limit 0.08
+        R0 = self['rmaj']
+        B0  = self['b0']
+        r0 = self['a']
+        D = self['d']  #Shafranov Shift
+        El = self['el'] #Elongation
+        Tr = self['tr'] #Triangularity limit 0.08
         
         n = [0,0,0] #n and m are linked to the mode nb for R and Z at the boundaries 
         m = [0,1,2]
@@ -295,12 +285,12 @@ class lunaScan(object):
             C.Flow.AH = AH # SET FLOW PROFILE
             C.Flow.bcrit = mach # SET FLOW MAGNITUDE
             
-            if self['profile'] in ['rhoT', 'rhoP']:
+            if self['profile'] in ['rho_t', 'rho_p']:
                 ### DENSITY
                 n0 = self['n0']
                 n_ = .5*n0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
                 
-                if self['profile'] == 'rhoT':
+                if self['profile'] == 'rho_t':
                     ### PT
                     n_ = .5*n0*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
                     
@@ -322,7 +312,7 @@ class lunaScan(object):
                     C.Pressure.AM = AM # SET PRESSURE PROFILE
                     C.Pressure.PRES_SCALE = 1.
                     
-                elif self['profile'] == 'rhoP':
+                elif self['profile'] == 'rho_p':
                     ### PT
                     T = np.ones_like(s)
                     T = T/T[0]
@@ -338,9 +328,9 @@ class lunaScan(object):
                     C.Pressure.AM = AM # SET PRESSURE PROFILE
                     C.Pressure.PRES_SCALE = 1.
                     
-                    C.Pressure.PMASS_TYPE = "'cubic_spline'"
-                    C.Pressure.AM_AUX_S = s
-                    C.Pressure.AM_AUX_F = PVMEC
+                    # C.Pressure.PMASS_TYPE = "'cubic_spline'"
+                    # C.Pressure.AM_AUX_S = s
+                    # C.Pressure.AM_AUX_F = PVMEC
                     
             elif self['profile'] == 'PT':
                 ### DENSITY
@@ -363,12 +353,12 @@ class lunaScan(object):
                 C.Pressure.AM = AM # SET PRESSURE PROFILE
                 C.Pressure.PRES_SCALE = 1.
                 
-                C.Pressure.PMASS_TYPE = "'cubic_spline'"
-                C.Pressure.AM_AUX_S = s
-                C.Pressure.AM_AUX_F = PVMEC
+                # C.Pressure.PMASS_TYPE = "'cubic_spline'"
+                # C.Pressure.AM_AUX_S = s
+                # C.Pressure.AM_AUX_F = PVMEC
             
         elif self['profile'] == 'rot':
-            ### rot
+            ### ROTATION
             mach = self['mach']
             Omega = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2))
             Omega = Omega/Omega[0]
@@ -396,6 +386,7 @@ class lunaScan(object):
             AM = np.polyfit(s2,PVMEC,11)[::-1]
             C.Pressure.AM = AM # SET PRESSURE PROFILE
             C.Pressure.PRES_SCALE = 1.
+
         self.Omega = Omega
         #======================================================================
         
@@ -423,12 +414,11 @@ class lunaScan(object):
         	print ('Insert a valid value for LRFP')
         	exit()
         
-        #C.Current.AI = AI
+        C.Current.AI = AI
         
-        C.Current.PIOTA_TYPE = "'cubic_spline'"
-        C.Current.AI_AUX_S = s
-        C.Current.AI_AUX_F = q 
-        
+        # C.Current.PIOTA_TYPE = "'cubic_spline'"
+        # C.Current.AI_AUX_S = s
+        # C.Current.AI_AUX_F = q 
         
         #Change some control parameters
         #======================================================================
@@ -442,9 +432,9 @@ class lunaScan(object):
         
         #Run VMEC Fixed boundary VMEC
         #======================================================================
-        DIR_VMEC = 'VMEC/'
+        DIR_VMEC = '/home/csch/VENUS-linux/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
         Fout = 'input.'+self.label_FIXED 
-        if self.initialisers['RunVMEC']:
+        if self['run_vmec']:
         	#Write the input file
         	C.WriteInput(Fout)
         
@@ -453,18 +443,18 @@ class lunaScan(object):
         	# os.system(DIR_VMEC+'./xvmec2000_netcdf '+Fout)
         
         	#Create the folders if not existent
-        	os.system(f'mkdir -p VMEC/{self.VMEClabel}/input')
-        	os.system(f'mkdir -p VMEC/{self.VMEClabel}/mercier')
-        	os.system(f'mkdir -p VMEC/{self.VMEClabel}/jxbout')
-        	os.system(f'mkdir -p VMEC/{self.VMEClabel}/threed1')
-        	os.system(f'mkdir -p VMEC/{self.VMEClabel}/wout')
+        	os.system(f'mkdir -p VMEC/{self.runid}/input')
+        	os.system(f'mkdir -p VMEC/{self.runid}/mercier')
+        	os.system(f'mkdir -p VMEC/{self.runid}/jxbout')
+        	os.system(f'mkdir -p VMEC/{self.runid}/threed1')
+        	os.system(f'mkdir -p VMEC/{self.runid}/wout')
         
         	#Move the output files to their folders
-        	os.system('mv input.'+self.label_FIXED+f' VMEC/{self.VMEClabel}/input')
-        	os.system('mv wout_'+self.label_FIXED+f'.nc VMEC/{self.VMEClabel}/wout')
-        	os.system('mv mercier.'+self.label_FIXED+f' VMEC/{self.VMEClabel}/mercier')
-        	os.system('mv jxbout_'+self.label_FIXED+f'.nc VMEC/{self.VMEClabel}/jxbout')
-        	os.system('mv threed1.'+self.label_FIXED+f' VMEC/{self.VMEClabel}/threed1')
+        	os.system('mv input.'+self.label_FIXED+f' VMEC/{self.runid}/input')
+        	os.system('mv wout_'+self.label_FIXED+f'.nc VMEC/{self.runid}/wout')
+        	os.system('mv mercier.'+self.label_FIXED+f' VMEC/{self.runid}/mercier')
+        	os.system('mv jxbout_'+self.label_FIXED+f'.nc VMEC/{self.runid}/jxbout')
+        	os.system('mv threed1.'+self.label_FIXED+f' VMEC/{self.runid}/threed1')
         	os.system('rm dcon_'+self.label_FIXED+'.txt')
         #======================================================================
         
@@ -484,8 +474,8 @@ class lunaScan(object):
         """
         
         #Read equilibrium from VMEC output file and transform it into SFL
-        self.label_FIXED = f'{self.VMEClabel}_{idx}'
-        eq = SATIRE2SFL.SATIRE2SFL(f'VMEC/{self.VMEClabel}/wout/wout_'+self.label_FIXED+'.nc')
+        self.label_FIXED = f'{self.runid}_{idx}'
+        eq = SATIRE2SFL.SATIRE2SFL(f'VMEC/{self.runid}/wout/wout_'+self.label_FIXED+'.nc')
         eq.Writeh5('eq.'+self.label_FIXED+'.h5')
         os.system('mv eq.'+self.label_FIXED+'.h5 eqFiles')
     	
@@ -496,7 +486,7 @@ class lunaScan(object):
     	#Modify the default grid
     	#----------------------------------------------------------------------
         n = self['n'] # toroidal mode number, <0 because of how vars are expanded in n, m
-        RationalM = self['RationalM']
+        RationalM = self['rationalm']
         Sidebands = self['sidebands']
         stab.grid.Mmin = RationalM-Sidebands
         stab.grid.Mmax = RationalM+Sidebands
@@ -522,9 +512,9 @@ class lunaScan(object):
         print ('Parameters at the magnetic axis:')
         print ('   M0    = %.5f'%(np.sqrt(eq.M02)))
         print ('   v0/vA = %.5f'%(V0_Va))
-        print ('   B0    = %.5f / %.5f [T]'%(eq.B0, self['B0']))
-        print ('   R0    = %.5f / %.5f [m]'%(eq.R0, self['R0']))
-        print ('   P0    = %.5f / %.5f [Pa]'%(eq.P0, (self['beta0']*self['B0']**2/(2.*eq.mu0)))) #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
+        print ('   B0    = %.5f / %.5f [T]'%(eq.B0, self['b0']))
+        print ('   R0    = %.5f / %.5f [m]'%(eq.R0, self['rmaj']))
+        print ('   P0    = %.5f / %.5f [Pa]'%(eq.P0, (self['beta0']*self['b0']**2/(2.*eq.mu0)))) #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
         print ('   beta0 = %.5f / %.5f %%'%(2.*eq.mu0*eq.P0/eq.B0**2., self['beta0']))
     	#----------------------------------------------------------------------
         
@@ -541,13 +531,13 @@ class lunaScan(object):
                 idx_rstep = find_nearest(stab.grid.S, self['rstep'])
                 #EV_guess = 1.0E-1 + (1.0j)*abs(n)*eq.Omega[idx_rstep] # want to re-implement this
                 EVguess = 1E-1
-                EVguess = EV_guess + (1.0j)*abs(n)*eq.Omega[0]
+                EVguess = EVguess + (1.0j)*abs(n)*eq.Omega[0]
             #elif EV_guess == 'bad': #EV_guess.real < 1.0E-07 # an attempt at correcting when the EV guesses get bad
                 #idx_rstep = find_nearest(stab.grid.S, self.profParams['rstep'])
                 #EV_guess = 1.0E-3 + (1.0j)*abs(n)*eq.Omega[idx_rstep]
                 
             print ('EV guess: %.5E + i(%.5E)'%(EVguess.real,EVguess.imag))
-            stab.Solve(EVguess,N_EV=1,EVectorsFile=f'{self.outpath}/{self.VMEClabel}_{idx}.hdf5') # VMEClabel_idx.hdf5 is where eigenvectors are stored?
+            stab.Solve(EVguess,N_EV=1,EVectorsFile=f'{self.scan_saveloc}/{self.runid}_{idx}.hdf5') # runid_idx.hdf5 is where eigenvectors are stored?
             print ('Solution time: %.4E with N = %i' %(time.time()-t0, stab.grid.N))
     		#------------------------------------------------------------------
     
@@ -556,7 +546,7 @@ class lunaScan(object):
             # Calculate peakedness
             # s2 = np.linspace(0.,1.,100) # grid
             # if self.initialisers['Peakedness']:
-            #     if self.params['profile'] in ['rhoT', 'rhoP']:
+            #     if self.params['profile'] in ['rho_t', 'rho_p']:
             #         #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
             #         mu0 = 4.*np.pi*1.0E-07
             #         dens = eq.P*2*mu0/(eq.beta0*eq.B0**2*eq.T) # normalised density
@@ -574,13 +564,13 @@ class lunaScan(object):
             print ('Most unstable eigenvalue')
             print ('(Gamma/OmegaA) = %.5E + i(%.5E)'%(EV.real,EV.imag))
     		
-            if self['ToPlot']:
+            if self['toplot']:
                 eq.plot(stab.grid, show=False)
                 stab.Solution.PlotEigenValues()
                 stab.Solution.PlotEigenVectors(eq, PlotDerivatives=False)
     		#------------------------------------------------------------------
 
-        output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.outpath}/{self.VMEClabel}_{idx}.hdf5', 'params':self.params, 'profile':self['profile']}
+        output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.hdf5', 'params':self.params.copy(), 'profile':self['profile']}
         
         return output.copy()
 
@@ -595,20 +585,21 @@ class lunaScan(object):
         for vidx, val in enumerate(self.scanparams[scanparam]):
             self.params[scanparam] = val # key needs to be the same in params and scanparams
             # Run VMEC
-            self._buildVMEC(idx = vidx) # sets self.label_FIXED inside of this function
-            eq = SATIRE2SFL.SATIRE2SFL(f'VMEC/{self.VMEClabel}/wout/wout_'+self.label_FIXED+'.nc')
+            if self['run_vmec']:
+                self._buildVMEC(idx = vidx) # sets self.label_FIXED inside of this function
+                eq = SATIRE2SFL.SATIRE2SFL(f'VMEC/{self.runid}/wout/wout_'+self.label_FIXED+'.nc')
 
-            if self['RunStab']:
+            if self['run_venus']:
                 # Set EV guess and calculate the growth rate
-                if self['EV_guess_type'] == 'last_EV':
+                if self['ev_guess_type'] == 'last_ev':
                     if vidx <= 2:
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = None, idx = vidx)
                     else:
                         lastrun = output1d[f'{scanid}_{vidx-1}']
                         EVguess = lastrun['EV']
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = EVguess, idx = vidx)
-                elif self['EV_guess_type'] == 'polynom_EV':
-                    if idx <= 3:
+                elif self['ev_guess_type'] == 'polynom_EV':
+                    if vidx <= 3:
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = None, idx = vidx)
                     else:
                         polycoeff = idx - 3
@@ -624,14 +615,15 @@ class lunaScan(object):
         
         return output1d.copy()
 
-    def run(self, saveloc = None):
+    def run(self, scan_saveloc = None):
+        self.scan_saveloc = scan_saveloc
         if self.scans: # integrated ND scan
             for scan in self.scans:
                 scanoutput = self.firstscan(scanid = self.runid)
-                self._save_scan(scanid = self.runid, scanoutput = scanoutput)
-            else: # 1D (or parallel ND) scan
-                scanoutput = self.firstscan(scanid = self.runid)
-                self._save_scan(scanid = self.runid, scanoutput = scanoutput, saveloc = saveloc)        
+                self._save_scan(scanid = self.runid, scanoutput = scanoutput, scan_saveloc = self.scan_saveloc)
+        else: # 1D (or parallel ND) scan
+            scanoutput = self.firstscan(scanid = self.runid)
+            self._save_scan(scanid = self.runid, scanoutput = scanoutput, scan_saveloc = self.scan_saveloc)        
         return
     
     ###### BUILD OUTPUT FILE ######
@@ -649,13 +641,14 @@ class lunaScan(object):
                 out_filename += f"_{key}"     
             return out_filename
 
-    def _save_scan(self, scanoutput, scanid = None, scan = None, saveloc = None):
+    def _save_scan(self, scanoutput, scanid = None, scan = None, scan_saveloc = None):
         # Saves a single scan to its corresponding subdirectory
         scan_info = self._get_scan_info(scanid = self.runid)
         if scan is None:
-            fOut = Path(saveloc) / f'{self.runid}.npz' # self.scanid.npz?
-            if saveloc is None:
+            if self.scan_saveloc is None:
                 fOut = self.outpath / f'{self.runid}.npz' # self.scanid.npz?
+            else:
+                fOut = Path(self.scan_saveloc) / f'{self.runid}.npz' # self.scanid.npz?
         else:
             fOut = self._build_scan_dir(scan) / f'{self.runid}.npz' # self.scanid.npz?
         if not(Path.exists(self.outpath)):
@@ -666,12 +659,9 @@ class lunaScan(object):
         return
 
     def save_run(self, runid = None):
-        # needs something built in for if one scan doesn't converge it skips it
-        # this doesn't take self.runid because saver.py doesn't make a self.runid
-        # either need this to make a self.runid or? probably fine like this
         if runid is None:
             runid = self.runid
-        saveloc = Path(f"{self.outpath}/{self.runid}")
+        run_saveloc = Path(f"{self.outpath}/{self.runid}")
             
         rundata = {}
         runinfo = {}
@@ -683,22 +673,20 @@ class lunaScan(object):
             raw_scan = np.load(scanfile, allow_pickle = True)
             rundata[scanid] = raw_scan['data'].item()
         runinfo['scanparams'] = self.scanparams
-        #fixed_params = ['profile','y0','y1','delq','beta','omega','m','n'] # y0/y1 vs y_step/y_avg TOGGLE
-        fixed_params = ['profile','y_step','y1','delq','beta','omega','m','n']
+        fixed_params = ['profile','drstep','mach','q0','beta0','rationalm','n']
         runinfo['fixedparams'] = {}
         for key in fixed_params:
             if key not in self.scanparams:
                 runinfo['fixedparams'][key] = self[key]
         runinfo['scanorder'] = self.scanorder
-        runinfo['scantype'] = self.scantype
         runinfo['scans'] = self.scans
         runinfo['timestamp'] = datetime.now().strftime("%d-%m-%y_%H:%M")
         
-        fOut = f"{saveloc}/{self.runid}.npz"
+        fOut = f"{run_saveloc}/{self.runid}.npz"
         
         np.savez(fOut, data = rundata, info = runinfo)
         inputpath = Path.cwd() / self.inputpath
-        copy2(inputpath, saveloc)
+        copy2(inputpath, run_saveloc)
         
         return # can save old runs if same input file (needs same scan parameters) and runid is provided using init_run
                     
