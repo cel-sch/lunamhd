@@ -78,7 +78,7 @@ class lunaScan(object):
         inputs = inputs['config_nml']
 
         self.scanorder = inputs['scanparams']
-        if type(self.scanorder) != list:
+        if type(self.scanorder) is not list:
             self.scanorder = [self.scanorder]
         self.scandim = len(self.scanorder)
 

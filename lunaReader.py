@@ -1,8 +1,11 @@
+import h5py
 import numpy as np
-import readh5 as rh5
 import scipy.integrate as spi
 from pathlib import Path
 from copy import deepcopy
+
+from VenusMHDpy.Bsplines import Bspline
+from VenusMHDpy.Grid import GRID
 
 class lunaRead(object):
     def __init__(self, filename, filePath = None):
@@ -84,10 +87,111 @@ class lunaRead(object):
         else:
             return var_list
 
-    def get_eigenfuncs(self, pointidx):
-        # need scanid
+    def get_eigenfuncs(self, varnrs, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
+        # Returns EF values
+        # varnr: the number of the eigenfunction variable being plotted (will be updated with variable names eventually)
+        # scanparam: the value over which was scanned
+        # spar list: if only want the variable values for certain specific scanparam values, specify those here
+        # paramSpecs: any additional parameter specifications (e.g. if scan was over omega and delq, could specify which delq here) (?)      
+        if spar_list is None:
+            spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
+        else:
+            spar_list = list(spar_list)
+        varnrs = list(varnrs)
+
+        EF_file_list = []
+        for p in spar_list:
+            paramSpecs = deepcopy(paramSpecs)
+            paramSpecs[scanparam] = p 
+            EF_file_list.append(self('EF_file', paramSpecs))
+
+        # for plotting
+        # def close_factors(subplot_nr):
+        #     # Find closest pair of factors for subplot_nr to have a nice arrangement of the subplots
+        #     factor1 = 0
+        #     factor2 = subplot_nr
+        #     while factor1+1 <= factor2:
+        #         factor1 += 1
+        #         if number % factor1 == 0:
+        #             factor2 = number // factor1
+        #     return factor1, factor2
+
+        # def row_col(subplot_nr):
+        #     # Better at finding good factors when numbers are prime
+        #     while True:
+        #         factor1, factor2 = close_factors(subplot_nr)
+        #         if 0.5*factor1 <= factor2:
+        #             break
+        #         subplot_nr += 1
+        #     return factor1, factor2
+
+        EF_list = {}
+        if len(EF_file_list) == 1: # looking at one point
+            for varnr in varnrs:
+                EF_list[f'varnr_{varnr+1}'] = self.read_EFh5(file = EF_file_list[0], varnr = varnr)
+        elif len(EF_file_list) > 1: # looking at multiple points
+            if len(varnrs) > 1:
+                print("ERROR: trying to retrieve multiple eigenfunctions for multiple scan points. Either specify one scan point or one eigenfunction to look at.")
+                return
+            for EF_file in EF_file_list:
+                EF_list[f'{EF_file}'] = self.read_EFh5(file = EF_file, varnr = varnrs[0])
+
+        return EF_list
     
     def print_run_info(self):
         for key, val in self.info.items():
             print(f"{key}: val")
+
+    def read_EFh5(self, file, varnr = 0):
+        """
+        Reads h5py file for given eigenvalue run and splines the eigenfunctions.
+        """
+        grid = GRID()
+        with h5py.File(file, 'r') as f:
+            ms = f['grid']['m'][()] # array of poloidal mode numbers
+            nus = f['grid']['nu'][()] # grid.nu is determined by which model is being used, for IdealMHDFlow-Euler is [3,2,2,2,3,3,2,2] because 8 variables
+            N = f['grid']['N'][()] # number of grid points?
+            #S = f['grid']['S'][()]
+            
+            ### Update grid with new parameters
+            grid.N = N
+            grid.nu = nus
+            grid.S = f['grid']['S'][()]
+            
+            grid.Mmin = min(f['grid']['m'][()])
+            grid.Mmax = max(f['grid']['m'][()])
+            
+            grid.knots = f['grid']['knots'][()]
+            grid.sk = f['grid']['sk'][()]
+            
+            # not all grid parameters are specified here, bspline uses: knots, sk, N, S
+            
+            ### Build Bspline arrays
+            r = np.linspace(0.,1.,10000)
+            BspCalc = []
+            
+            nu = nus[varnr]      
+            vec_allms = f['variables'][f'var{varnr}'] # all poloidal mode numbers for variable varnr (in h5py vars go from 0 to 7)
+
+            #Create the Bspline arrays
+            #-------------------------------------------------------------------------------------------------
+            if nu not in BspCalc:
+                BspCalc.append(nu)	
+                vars()['Bsp'+str(nu)] = np.zeros(shape=(r.size, N+1+nu))
+                
+                for j in range(N):
+                    l = np.ones(len(r), dtype=int)*j-nu
+                    vars()['Bsp'+str(nu)][:,j] = Bspline(r,l,nu,grid,der=0)
+                    
+            mixB = max(nus)-nu # 8 - order of variable (2 or 3 generally)
+            
+            mode_allms = {}
+            for j in range(f['grid']['Mtot'][()]): # selects vector for every poloidal mode number
+                vec = vec_allms[j]
+                mode = np.sum(vars()['Bsp'+str(nu)]*vec, axis=1) # performs a bspline on the vector?
+                mode_allms[f'm={ms[j]}'] = mode
+
+            return mode_allms
+
+    
     
