@@ -1,6 +1,7 @@
 # Ignore VMEC files
 VMEC/*
 !VMEC/xvmec2000_flow_netcdf
+!VMEC/input/input.Default
 
 # Ignore output files
 Output/*
