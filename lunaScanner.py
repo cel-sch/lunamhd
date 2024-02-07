@@ -40,16 +40,16 @@ class lunaScan(object):
         self.inputpath = inputpath
         if self.inputpath is None:
             #self.inputpath = f'/users/cs2427/lunamhd/Input/{self.inputfile}'
-            self.inputpath = f'/home/csch/VENUS-linux/lunamhd/Input/{self.inputfile}'
+            self.inputpath = f'/users/cs2427/lunamhd/Input/{self.inputfile}'
         else:
             self.inputpath = self.inputpath + '/' + self.inputfile
         ### Define outpath
         if self['mode_type'] == 'KH':
-            #self.outpath = Path('/users/cs2427/scratch/lunamhd/KH') # for running on viking
-            self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Results/KH')
+            self.outpath = Path('/users/cs2427/scratch/lunamhd-data/KH') # for running on viking
+            #self.outpath = Path('/users/cs2427/lunamhd/Input/Results/KH')
         elif self['mode_type'] == 'IK':
-            #self.outpath = Path('/users/cs2427/scratch/lunamhd/IK') # for running on viking
-            self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Output/IK')
+            self.outpath = Path('/users/cs2427/scratch/lunamhd-data/IK') # for running on viking
+            #self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Output/IK')
         
         ### Essentially the contents of init_scan
         self.scans = {}
@@ -210,8 +210,8 @@ class lunaScan(object):
         self.label_FIXED = f'{self.runid}_{idx}' #Name for 1 point in scan e.g. test_1. VMEClabel is runid, produced when init_run is run
         
         #Read the default input file
-        #C = VMECInput.ReadInputVMEC('/users/cs2427/lunamhd/VMEC/input/input.Default') # BUGFIX: will need to check if this works
-        C = VMECInput.ReadInputVMEC('/home/csch/VENUS-linux/lunamhd/VMEC/input/input.Default') 
+        C = VMECInput.ReadInputVMEC('/users/cs2427/lunamhd/VMEC/input/input.Default') # BUGFIX: will need to check if this works
+        #C = VMECInput.ReadInputVMEC('/home/csch/VENUS-linux/lunamhd/VMEC/input/input.Default') 
         
         #Modify some grid and control parameters, these get written to VMEC input
         #======================================================================
@@ -407,12 +407,12 @@ class lunaScan(object):
         self.q = q
         
         if C.Grid.LRFP == 'F':
-        	AI = np.polyfit(s2,-1./q,11)[::-1]
+            AI = np.polyfit(s2,-1./q,11)[::-1]
         elif C.Grid.LRFP == 'T':
-        	AI = np.polyfit(s2,-q,11)[::-1]
+            AI = np.polyfit(s2,-q,11)[::-1]
         else:
-        	print ('Insert a valid value for LRFP')
-        	exit()
+            print ('Insert a valid value for LRFP')
+            exit()
         
         C.Current.AI = AI
         
@@ -432,30 +432,31 @@ class lunaScan(object):
         
         #Run VMEC Fixed boundary VMEC
         #======================================================================
-        DIR_VMEC = '/home/csch/VENUS-linux/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
+        #DIR_VMEC = '/home/csch/VENUS-linux/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
+        DIR_VMEC = '/users/cs2427/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
         Fout = 'input.'+self.label_FIXED 
         if self['run_vmec']:
         	#Write the input file
-        	C.WriteInput(Fout)
+            C.WriteInput(Fout)
         
         	#Run VMEC
-        	os.system(DIR_VMEC+'./xvmec2000_flow_netcdf '+Fout)
-        	# os.system(DIR_VMEC+'./xvmec2000_netcdf '+Fout)
-        
-        	#Create the folders if not existent
-        	os.system(f'mkdir -p VMEC/{self.runid}/input')
-        	os.system(f'mkdir -p VMEC/{self.runid}/mercier')
-        	os.system(f'mkdir -p VMEC/{self.runid}/jxbout')
-        	os.system(f'mkdir -p VMEC/{self.runid}/threed1')
-        	os.system(f'mkdir -p VMEC/{self.runid}/wout')
-        
-        	#Move the output files to their folders
-        	os.system('mv input.'+self.label_FIXED+f' VMEC/{self.runid}/input')
-        	os.system('mv wout_'+self.label_FIXED+f'.nc VMEC/{self.runid}/wout')
-        	os.system('mv mercier.'+self.label_FIXED+f' VMEC/{self.runid}/mercier')
-        	os.system('mv jxbout_'+self.label_FIXED+f'.nc VMEC/{self.runid}/jxbout')
-        	os.system('mv threed1.'+self.label_FIXED+f' VMEC/{self.runid}/threed1')
-        	os.system('rm dcon_'+self.label_FIXED+'.txt')
+            os.system(DIR_VMEC+'./xvmec2000_flow_netcdf '+Fout)
+            # os.system(DIR_VMEC+'./xvmec2000_netcdf '+Fout)
+
+            #Create the folders if not existent
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/wout')
+
+            #Move the output files to their folders
+            os.system('mv input.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
+            os.system('mv wout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/wout')
+            os.system('mv mercier.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
+            os.system('mv jxbout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
+            os.system('mv threed1.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
+            os.system('rm dcon_'+self.label_FIXED+'.txt')
         #======================================================================
         
     ###### VENUS ######
@@ -537,11 +538,14 @@ class lunaScan(object):
                 #EV_guess = 1.0E-3 + (1.0j)*abs(n)*eq.Omega[idx_rstep]
                 
             print ('EV guess: %.5E + i(%.5E)'%(EVguess.real,EVguess.imag))
-            stab.Solve(EVguess,N_EV=1,EVectorsFile=f'{self.scan_saveloc}/{self.runid}_{idx}.hdf5') # runid_idx.hdf5 is where eigenvectors are stored?
+            #stab.Solve(EVguess,N_EV=1,EVectorsFile=f'{self.scan_saveloc}/{self.runid}_{idx}.hdf5') # runid_idx.hdf5 is where eigenvectors are stored?
+            stab.Solve(EVguess,N_EV=1)
+            stab.Saveh5(FileName=f'{self.scan_saveloc}/{self.runid}_{idx}')
             print ('Solution time: %.4E with N = %i' %(time.time()-t0, stab.grid.N))
     		#------------------------------------------------------------------
     
-            EV = max(stab.Solution.vals)
+            #EV = max(stab.Solution.vals)
+            EV = max(stab.vals)
             
             # Calculate peakedness
             # s2 = np.linspace(0.,1.,100) # grid
@@ -566,8 +570,10 @@ class lunaScan(object):
     		
             if self['toplot']:
                 eq.plot(stab.grid, show=False)
-                stab.Solution.PlotEigenValues()
-                stab.Solution.PlotEigenVectors(eq, PlotDerivatives=False)
+                #stab.Solution.PlotEigenValues()
+                #stab.Solution.PlotEigenVectors(eq, PlotDerivatives=False)
+                stab.PlotEigenValues()
+                stab.PlotEigenVectors(eq, PlotDerivatives=False)
     		#------------------------------------------------------------------
 
         output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.hdf5', 'params':self.params.copy(), 'profile':self['profile']}
@@ -599,19 +605,22 @@ class lunaScan(object):
                         EVguess = lastrun['EV']
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = EVguess, idx = vidx)
                 elif self['ev_guess_type'] == 'polynom_EV':
+                    ws = [] # BUGFIX: this is probably gonna be a problem for re-running scans halfway through, going to need to find a way to read results as they're being made
                     if vidx <= 3:
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = None, idx = vidx)
+                        ws.append(output1d[f'{scanid}_{vidx}']['EV'])
                     else:
-                        polycoeff = idx - 3
+                        polycoeff = vidx - 3
                         if polycoeff > 5:
                             polycoeff = 5
 
-                        guessReal = np.polyfit(np.asarray(val[:idx]),np.asarray([i.real for i in ws[:idx]]),polycoeff)
-                        guessImag = np.polyfit(np.asarray(val[:idx]),np.asarray([i.imag for i in ws[:idx]]),polycoeff)
+                        guessReal = np.polyfit(np.asarray(self.scanparams[scanparam][:vidx]),np.asarray([i.real for i in ws[:vidx]]),polycoeff)
+                        guessImag = np.polyfit(np.asarray(self.scanparams[scanparam][:vidx]),np.asarray([i.imag for i in ws[:vidx]]),polycoeff)
                         
-                        EVguess = np.polyval(guessReal,v) + 1j*np.polyval(guessImag,v)
+                        EVguess = np.polyval(guessReal,val) + 1j*np.polyval(guessImag,val)
                         EVguess += 1j*EVguess.imag*1E-3 # want to be slightly larger than the correct EV
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = EVguess, idx = vidx)
+                        ws.append(output1d[f'{scanid}_{vidx}']['EV'])
         
         return output1d.copy()
 

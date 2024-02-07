@@ -14,6 +14,6 @@ parser.add_argument('runid', type=str, help='run name, used for final output fil
 scan_args = parser.parse_args()
 
 runid = scan_args.runid
-run = lunaScan(inputfile = scan_args.inputfile)
-run.init_run(runid = runid)
+run = lunaScan(runid = scan_args.runid, inputfile = scan_args.inputfile)
+run.init_run()
 print(f"Run {runid} initialised.")

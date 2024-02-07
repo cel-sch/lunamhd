@@ -8,5 +8,6 @@ parser.add_argument('scanid', type=str, help='scan name, used for final output f
 
 scan_args = parser.parse_args()
 
-scan = lunaScan(inputfile = scan_args.inputfile, inputpath = scan_args.input_path) # reads in the correct input file
-scan.run(saveloc = f'{scan_args.input_path}')
+scanid = scan_args.scanid
+scan = lunaScan(runid = scanid, inputfile = scan_args.inputfile, inputpath = scan_args.input_path) # reads in the correct input file
+scan.run(scan_saveloc = f'{scan_args.input_path}')
