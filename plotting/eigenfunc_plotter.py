@@ -6,15 +6,15 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
+from numpy import linspace
 
 from matplotlib.pyplot import subplots, show, ion, axes, tight_layout
 from matplotlib.widgets import Slider, Button
 
 default_settings = {'suptitle': None,
                     'title':None,
-                    'y_axis_type':'eigenval', # ['eigenval','margin_stab']
+                    'y_axis_type':'eigenfunc', # ['eigenval','margin_stab']
                     'x_axis_type':'initparam',
-                    'EV_visible':{'gam':True, 'wr':False},
                     'fig_type':'general', # ['paper', 'singleplot']
                     'fontsizes':{'general':{'title':14,'axis':12,'suptitle':20},
                                  'paper':{'title':10,'axis':9,'suptitle':12}},
@@ -22,9 +22,9 @@ default_settings = {'suptitle': None,
                                 'paper':[4.5,3.5]},
                     'linestyles':{'plain':'-x','asy':'D-'},
                     'markersize':2,
-                    'visible':{'suptitle':True, 'legend':True, 'grid':True}}
+                    'visible':{'suptitle':True, 'title':True, 'legend':True, 'grid':True}}
 
-class plot_growth(object):
+class plot_EF(object):
     def __init__(self, reader, settings = {}):
         self.reader = reader
         self.settings = {}
@@ -64,9 +64,31 @@ class plot_growth(object):
             plotfilename = ''.join([i for i in str(plotfilename)[:-4]])
         self.fig.savefig(plotfilename)
         
-    def open_plot(self, plotfilename = None, ykey = None):
+    def open_plot(self, subplot_nr, plotfilename = None):
         # Creates figure and axes
-        self.fig, self.ax = subplots(figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
+        self.subplot_nr = subplot_nr
+
+        def row_col(subplot_nr):
+            # Finds the number of rows and columns best to use for EF subplots depending on the number of subplots
+            def close_factors(subplot_nr):
+                # Find closest pair of factors for subplot_nr to have a nice arrangement of the subplots
+                factor1 = 0
+                factor2 = subplot_nr
+                while factor1+1 <= factor2:
+                    factor1 += 1
+                    if number % factor1 == 0:
+                        factor2 = number // factor1
+                return factor1, factor2
+
+            while True:
+                factor1, factor2 = close_factors(subplot_nr)
+                if 0.5*factor1 <= factor2:
+                    break
+                subplot_nr += 1
+            return factor1, factor2
+
+        rownr, colnr = row_col(subplot_nr = subplot_nr)
+        self.fig, self.axs = subplots(nrows = rownr, ncols = colnr, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
         self.fig.set_tight_layout(True)
              
         self.scans = self.reader.info['scans']
@@ -90,22 +112,20 @@ class plot_growth(object):
         self.draw_fig()
         
     def _load_x_axis(self, axis_type):
-        if axis_type not in ['initparam']:
-            print("ERROR: axis_type not found, valid types ['initparam']")
-            return
         if axis_type == 'initparam':
-            self.xkey = self.reader.info['scanorder'][0]
-        self._x_ax_label = self._getlabel(self.xkey)
+            self.xkey = self.reader.info['scanorder'][0] # required for input to retrieve list of eigenfuncs
+        self.r = linspace(0.,1.,10000)
+        self._x_ax_label = 'r'
         
     def _load_y_axis(self, axis_type):
-        if axis_type not in ['eigenval']:
-            print("ERROR: axis_type not found, valid types: ['eigenval']")
+        if axis_type not in ['eigenfunc']:
+            print("ERROR: axis_type not found, valid types: ['eigenfunc']")
             return
-        if axis_type == 'eigenval':
-            self.ykeys = 'EV'
-            self._y_ax_label = self._getlabel('gam')
+        if axis_type == 'eigenfunc':
+            self.ykeys = 'EF_file'
+            self._y_ax_label = 'a.u.'
 
-    def plot_vals(self, scan = None):
+    def plot_vals(self, varnrs, scan = None):
         if scan: 
             self.scanlabel = [f'{self._getlabel(key)}={keyval}' for key, keyval in scan.items()] # empty for 1D scans
             self.scanlabel = ', '.join(self.scanlabel)
@@ -113,14 +133,14 @@ class plot_growth(object):
             self.scanlabel = None
             scan = {} # to set paramSpecs to {}
 
-        x_vals, y_vals = self.reader.get_1d_list(self.xkey, self.ykeys, paramSpecs = scan) # need to check what happens if paramSpecs = None
-            
-        if self['EV_visible']['gam']:
-            gam_vals = [i.real for i in y_vals]
-            self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
-        if self['EV_visible']['wr']:
-            wr_vals = [i.imag for i in y_vals]
-            self.ax.plot(x_vals, wr_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
+        EF_keys, EF_ms = self.reader.get_eigenfunc_list(varnrs = varnrs, self.xkey, self.ykeys, paramSpecs = scan) # need to check what happens if paramSpecs = None
+        
+        for i, EF_key in enumerate(EF_keys): # subplot_nr should be the same as the length of EF_keys, print error if not the case
+            for m_val, EF in EF_ms.items():
+                mode = EF
+                vars()['ax'+f'{i}'].plot(self.r, mode, label=f'{m_val}') 
+                if self['visible']['title']:
+                    vars()['ax'+f'{i}'].set_title(f'{EF_key}') 
         
     def draw_fig(self):
         self.lstyle = self['linestyles']['plain']

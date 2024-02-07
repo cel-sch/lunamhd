@@ -673,7 +673,7 @@ class lunaScan(object):
             raw_scan = np.load(scanfile, allow_pickle = True)
             rundata[scanid] = raw_scan['data'].item()
         runinfo['scanparams'] = self.scanparams
-        fixed_params = ['profile','drstep','mach','q0','beta0','rationalm','n']
+        fixed_params = ['profile','drstep','mach','q0','beta0','rationalm','n', 'rmaj']
         runinfo['fixedparams'] = {}
         for key in fixed_params:
             if key not in self.scanparams:

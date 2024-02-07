@@ -6,6 +6,7 @@ from copy import deepcopy
 
 from VenusMHDpy.Bsplines import Bspline
 from VenusMHDpy.Grid import GRID
+from lunamhd.plotting import Plotters
 
 class lunaRead(object):
     def __init__(self, filename, filePath = None):
@@ -87,7 +88,7 @@ class lunaRead(object):
         else:
             return var_list
 
-    def get_eigenfuncs(self, varnrs, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
+    def get_eigenfunc_list(self, varnrs, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
         # Returns EF values
         # varnr: the number of the eigenfunction variable being plotted (will be updated with variable names eventually)
         # scanparam: the value over which was scanned
@@ -97,34 +98,14 @@ class lunaRead(object):
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
             spar_list = list(spar_list)
-        varnrs = list(varnrs)
+        varnrs = [varnrs]
 
         EF_file_list = []
         for p in spar_list:
             paramSpecs = deepcopy(paramSpecs)
             paramSpecs[scanparam] = p 
             EF_file_list.append(self('EF_file', paramSpecs))
-
-        # for plotting
-        # def close_factors(subplot_nr):
-        #     # Find closest pair of factors for subplot_nr to have a nice arrangement of the subplots
-        #     factor1 = 0
-        #     factor2 = subplot_nr
-        #     while factor1+1 <= factor2:
-        #         factor1 += 1
-        #         if number % factor1 == 0:
-        #             factor2 = number // factor1
-        #     return factor1, factor2
-
-        # def row_col(subplot_nr):
-        #     # Better at finding good factors when numbers are prime
-        #     while True:
-        #         factor1, factor2 = close_factors(subplot_nr)
-        #         if 0.5*factor1 <= factor2:
-        #             break
-        #         subplot_nr += 1
-        #     return factor1, factor2
-
+            
         EF_list = {}
         if len(EF_file_list) == 1: # looking at one point
             for varnr in varnrs:
@@ -142,6 +123,11 @@ class lunaRead(object):
         for key, val in self.info.items():
             print(f"{key}: val")
 
+    ### PLOT FUNCTIONS ###
+    def basic_plot(self, settings = {}):
+        return Plotters['Growth'](self, settings)
+
+    ### DATA ANALYSIS FUNCTIONS ###
     def read_EFh5(self, file, varnr = 0):
         """
         Reads h5py file for given eigenvalue run and splines the eigenfunctions.
@@ -192,6 +178,8 @@ class lunaRead(object):
                 mode_allms[f'm={ms[j]}'] = mode
 
             return mode_allms
+
+
 
     
     
