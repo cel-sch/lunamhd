@@ -4,7 +4,7 @@
    mode_type = 'KH'
    scanparams = 'mach'
    profile = 'rot'
-   mach = 1, 0, 15
+   mach = 1, 0, 2
    beta0 = 0.018
    rmaj = 10
    a = 1

@@ -444,18 +444,18 @@ class lunaScan(object):
             # os.system(DIR_VMEC+'./xvmec2000_netcdf '+Fout)
 
             #Create the folders if not existent
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/wout')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/input')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/mercier')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/jxbout')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/threed1')
+            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/wout')
 
             #Move the output files to their folders
-            os.system('mv input.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
-            os.system('mv wout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/wout')
-            os.system('mv mercier.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
-            os.system('mv jxbout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
-            os.system('mv threed1.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
+            os.system('mv input.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/input')
+            os.system('mv wout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/wout')
+            os.system('mv mercier.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/mercier')
+            os.system('mv jxbout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/jxbout')
+            os.system('mv threed1.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/threed1')
             os.system('rm dcon_'+self.label_FIXED+'.txt')
         #======================================================================
         
@@ -476,7 +476,7 @@ class lunaScan(object):
         
         #Read equilibrium from VMEC output file and transform it into SFL
         self.label_FIXED = f'{self.runid}_{idx}'
-        eq = SATIRE2SFL.SATIRE2SFL(f'VMEC/{self.runid}/wout/wout_'+self.label_FIXED+'.nc')
+        eq = SATIRE2SFL.SATIRE2SFL(f'/users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/wout/wout_'+self.label_FIXED+'.nc')
         eq.Writeh5('eq.'+self.label_FIXED+'.h5')
         os.system('mv eq.'+self.label_FIXED+'.h5 eqFiles')
     	
@@ -593,7 +593,7 @@ class lunaScan(object):
             # Run VMEC
             if self['run_vmec']:
                 self._buildVMEC(idx = vidx) # sets self.label_FIXED inside of this function
-                eq = SATIRE2SFL.SATIRE2SFL(f'VMEC/{self.runid}/wout/wout_'+self.label_FIXED+'.nc')
+                eq = SATIRE2SFL.SATIRE2SFL(f'/users/cs2427/scratch/lunamhd-data/KH/{self.runid}/VMEC/wout/wout_'+self.label_FIXED+'.nc')
 
             if self['run_venus']:
                 # Set EV guess and calculate the growth rate
