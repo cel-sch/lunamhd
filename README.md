@@ -19,6 +19,7 @@ If running the scan immediately in the same terminal:
   run.run(scan_saveloc = inputpath)
 
 Else:
+
   scan = lunaScan(runid = scanid, inputfile = 'default.in', inputpath = 'path_to_input_file') # reads in the correct input file
   scan.run(scan_saveloc = 'path_to_input_file')
 
@@ -27,6 +28,7 @@ If saving the scan immediately in the same terminal:
   run.save_run()
 
 Else:
+
   run = lunaScan(runid = runid, inputfile = 'path_to_input_file')
   run.scans = run._make_scan_list()
   run.save_run()
