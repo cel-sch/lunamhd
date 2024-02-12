@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#----------------------------- Slurm directives ------------------------------#
+#SBATCH --job-name=lunascan               # Job name
+#SBATCH --partition=nodes               # What partition the job should run on
+#SBATCH --ntasks=1                      # Number of MPI tasks to request
+#SBATCH --cpus-per-task=1               # Number of CPU cores per MPI task
+#SBATCH --mem=100M                        # Total memory to request
+#SBATCH --time=0-00:3:00               # Time limit (DD-HH:MM:SS)
+#SBATCH --account=pet-venus-2023        # Project account to use
+#SBATCH --mail-type=NONE         # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=cs2427@york.ac.uk   # Where to send mail
+#SBATCH --output=%x-%j.log              # Standard output log
+#SBATCH --error=%x-%j.err               # Standard error log
+
+# Abort if any command fails
+set -e
+
+# purge any existing modules
+module purge
+
+# Load modules
+module load Python/3.10.4-GCCcore-11.3.0
+
+# Commands to run
+RUNNAME="$1"
+export RUNNAME
+INPUTFILE="default.in"
+export INPUTFILE
+ARRAYNR="$2"
+export ARRAYNR
+
+sed -i "14s/array=.*/array=1-$ARRAYNR/" ~/jobscripts/lunascan_scan.job 
+INITIT=$(sbatch --parsable ~/jobscripts/lunascan_init.job)
+SCANS=$(sbatch --parsable --dependency=afterany:$INITIT ~/jobscripts/lunascan_scan.job)
+SAVEIT=$(sbatch --parsable --dependency=afterany:$SCANS ~/jobscripts/lunascan_save.job)
