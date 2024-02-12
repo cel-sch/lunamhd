@@ -143,9 +143,9 @@ class plot_EF(object):
             self.subplot_nr = len(self.spar_list)
 
     def plot_vals(self, scan = None):
-        EF_keys, EF_ms = self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = None, paramSpecs = scan) # need to check what happens if paramSpecs = None
+        EF_files, EF_ms = self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = None, paramSpecs = scan).items() # need to check what happens if paramSpecs = None
         
-        for i, EF_key in enumerate(EF_keys): # subplot_nr should be the same as the length of EF_keys, print error if not the case
+        for i, EF_key in enumerate(EF_files):
             for m_val, EF in EF_ms.items():
                 mode = EF
                 vars()['ax'+f'{i}'].plot(self.r, mode, label=f'{m_val}') 
