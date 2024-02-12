@@ -40,16 +40,16 @@ class lunaScan(object):
         self.inputpath = inputpath
         if self.inputpath is None:
             #self.inputpath = f'/users/cs2427/lunamhd/Input/{self.inputfile}'
-            self.inputpath = f'/users/cs2427/lunamhd/Input/{self.inputfile}'
+            self.inputpath = f'/home/csch/VENUS-linux/lunamhd/Input/{self.inputfile}'
         else:
             self.inputpath = self.inputpath + '/' + self.inputfile
         ### Define outpath
         if self['mode_type'] == 'KH':
-            self.outpath = Path('/users/cs2427/scratch/lunamhd-data/KH') # for running on viking
-            #self.outpath = Path('/users/cs2427/lunamhd/Input/Results/KH')
+            #self.outpath = Path('/users/cs2427/scratch/lunamhd-data/KH') # for running on viking
+            self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Output/KH/')
         elif self['mode_type'] == 'IK':
-            self.outpath = Path('/users/cs2427/scratch/lunamhd-data/IK') # for running on viking
-            #self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Output/IK')
+            #self.outpath = Path('/users/cs2427/scratch/lunamhd-data/IK') # for running on viking
+            self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Output/IK/')
         
         ### Essentially the contents of init_scan
         self.scans = {}
@@ -210,8 +210,8 @@ class lunaScan(object):
         self.label_FIXED = f'{self.runid}_{idx}' #Name for 1 point in scan e.g. test_1. VMEClabel is runid, produced when init_run is run
         
         #Read the default input file
-        C = VMECInput.ReadInputVMEC('/users/cs2427/lunamhd/VMEC/input/input.Default') # BUGFIX: will need to check if this works
-        #C = VMECInput.ReadInputVMEC('/home/csch/VENUS-linux/lunamhd/VMEC/input/input.Default') 
+        #C = VMECInput.ReadInputVMEC('/users/cs2427/lunamhd/VMEC/input/input.Default') # BUGFIX: will need to check if this works
+        C = VMECInput.ReadInputVMEC('/home/csch/VENUS-linux/lunamhd/VMEC/input/input.Default') 
         
         #Modify some grid and control parameters, these get written to VMEC input
         #======================================================================
@@ -373,7 +373,8 @@ class lunaScan(object):
             n_ = n0*(1.-s**nu_n)
             
             ### PT
-            T = np.ones_like(s)
+            #T = np.ones_like(s)
+            T = n0*(1.-s**6) + 0.01
             T = T/T[0]
             AT = np.polyfit(s2,T,11)[::-1] # SET PT PROFILE
             C.Flow.AT = AT
@@ -432,30 +433,41 @@ class lunaScan(object):
         
         #Run VMEC Fixed boundary VMEC
         #======================================================================
-        #DIR_VMEC = '/home/csch/VENUS-linux/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
-        DIR_VMEC = '/users/cs2427/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
+        DIR_VMEC = '/home/csch/VENUS-linux/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
+        #DIR_VMEC = '/users/cs2427/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
         Fout = 'input.'+self.label_FIXED 
         if self['run_vmec']:
         	#Write the input file
             C.WriteInput(Fout)
         
         	#Run VMEC
-            os.system(DIR_VMEC+'./xvmec2000_flow_netcdf '+Fout)
-            # os.system(DIR_VMEC+'./xvmec2000_netcdf '+Fout)
+            #os.system(DIR_VMEC+'./xvmec2000_flow_netcdf '+Fout)
+            os.system(DIR_VMEC+'./vmec_flow '+Fout)
+            print("USING VMEC VERSION vmec_flow")
 
             #Create the folders if not existent
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
-            os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/wout')
+            # os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
+            # os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
+            # os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
+            # os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
+            # os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/wout')
+            os.system(f'mkdir -p /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/input')
+            os.system(f'mkdir -p /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/mercier')
+            os.system(f'mkdir -p /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/jxbout')
+            os.system(f'mkdir -p /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/threed1')
+            os.system(f'mkdir -p /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout')
 
             #Move the output files to their folders
-            os.system('mv input.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
-            os.system('mv wout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/wout')
-            os.system('mv mercier.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
-            os.system('mv jxbout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
-            os.system('mv threed1.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
+            # os.system('mv input.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
+            # os.system('mv wout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/wout')
+            # os.system('mv mercier.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
+            # os.system('mv jxbout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
+            # os.system('mv threed1.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
+            os.system('mv input.'+self.label_FIXED+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/input')
+            os.system('mv wout_'+self.label_FIXED+f'.nc /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout')
+            os.system('mv mercier.'+self.label_FIXED+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/mercier')
+            os.system('mv jxbout_'+self.label_FIXED+f'.nc /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/jxbout')
+            os.system('mv threed1.'+self.label_FIXED+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/threed1')
             os.system('rm dcon_'+self.label_FIXED+'.txt')
         #======================================================================
         
@@ -476,7 +488,7 @@ class lunaScan(object):
         
         #Read equilibrium from VMEC output file and transform it into SFL
         self.label_FIXED = f'{self.runid}_{idx}'
-        eq = SATIRE2SFL.SATIRE2SFL(f'VMEC/{self.runid}/wout/wout_'+self.label_FIXED+'.nc')
+        eq = SATIRE2SFL.SATIRE2SFL(f'/home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout/wout_'+self.label_FIXED+'.nc')
         eq.Writeh5('eq.'+self.label_FIXED+'.h5')
         os.system('mv eq.'+self.label_FIXED+'.h5 eqFiles')
     	
@@ -593,7 +605,7 @@ class lunaScan(object):
             # Run VMEC
             if self['run_vmec']:
                 self._buildVMEC(idx = vidx) # sets self.label_FIXED inside of this function
-                eq = SATIRE2SFL.SATIRE2SFL(f'VMEC/{self.runid}/wout/wout_'+self.label_FIXED+'.nc')
+                eq = SATIRE2SFL.SATIRE2SFL(f'/home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout/wout_'+self.label_FIXED+'.nc')
 
             if self['run_venus']:
                 # Set EV guess and calculate the growth rate

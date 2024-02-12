@@ -15,3 +15,4 @@ non-luna-scripts/*
 
 # Ignore random python files
 __pycache__/*
+plotting/__pycache__/*
