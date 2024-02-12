@@ -441,9 +441,9 @@ class lunaScan(object):
             C.WriteInput(Fout)
         
         	#Run VMEC
-            #os.system(DIR_VMEC+'./xvmec2000_flow_netcdf '+Fout)
-            os.system(DIR_VMEC+'./vmec_flow '+Fout)
-            print("USING VMEC VERSION vmec_flow")
+            vmec_ver = 'xvmec2000_flow_netcdf' # vmec_flow
+            os.system(DIR_VMEC+f'./{vmec_ver} '+Fout)
+            print(f"USING VMEC VERSION {vmec_ver}")
 
             #Create the folders if not existent
             # os.system(f'mkdir -p /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/input')
@@ -588,7 +588,7 @@ class lunaScan(object):
                 stab.PlotEigenVectors(eq, PlotDerivatives=False)
     		#------------------------------------------------------------------
 
-        output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.hdf5', 'params':self.params.copy(), 'profile':self['profile']}
+        output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.h5', 'params':self.params.copy(), 'profile':self['profile']}
         
         return output.copy()
 

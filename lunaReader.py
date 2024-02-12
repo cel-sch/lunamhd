@@ -92,7 +92,7 @@ class lunaRead(object):
     def get_eigenfunc_list(self, varnrs, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
         # Returns EF values
         # varnr: the number of the eigenfunction variable being plotted (will be updated with variable names eventually)
-        # scanparam: the value over which was scanned
+        # scanparam: the scan parameter for which we want to see several EFs
         # spar list: if only want the variable values for certain specific scanparam values, specify those here
         # paramSpecs: any additional parameter specifications (e.g. if scan was over omega and delq, could specify which delq here) (?)      
         if spar_list is None:
@@ -127,6 +127,9 @@ class lunaRead(object):
     ### PLOT FUNCTIONS ###
     def basic_plot(self, settings = {}):
         return Plotters['Growth'](self, settings)
+
+    def EF_plot(self, varnrs, scanparam = None, spar_list = None, settings = {}):
+        return Plotters['EF'](self, varnrs, scanparam, spar_list, settings)
 
     ### DATA ANALYSIS FUNCTIONS ###
     def read_EFh5(self, file, varnr = 0):
