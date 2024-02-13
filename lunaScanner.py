@@ -522,8 +522,9 @@ class lunaScan(object):
         
         #Read equilibrium from VMEC output file and transform it into SFL
         eq = SATIRE2SFL.SATIRE2SFL(f'/home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout/wout_'+f'{self.runid}_{idx}'+'.nc')
-        eq.Writeh5(eqFile=f'{self.scan_saveloc}/eq.{self.runid}_{idx}.h5')
-        #os.system('mv eq.'+f'{self.runid}_{idx}'+'.h5 eqFiles')
+        eq.Writeh5(eqFile=f'eq.{self.runid}_{idx}.h5')
+        os.system('mv '+f'eq.{self.runid}_{idx}.h5'+' eqFiles')
+        #note: writeh5 is essentially run again inside of saveh5, so functionally it's run twice but these files are discarded
     	
     	#Create the stability object
         stab = Stability.Stability('IdealMHDFlow-Euler')
@@ -583,13 +584,11 @@ class lunaScan(object):
                 #EV_guess = 1.0E-3 + (1.0j)*abs(n)*eq.Omega[idx_rstep]
                 
             print ('EV guess: %.5E + i(%.5E)'%(EVguess.real,EVguess.imag))
-            #stab.Solve(EVguess,N_EV=1,EVectorsFile=f'{self.scan_saveloc}/{self.runid}_{idx}.hdf5') # runid_idx.hdf5 is where eigenvectors are stored?
             stab.Solve(EVguess,N_EV=1)
-            stab.Saveh5(FileName=f'{self.scan_saveloc}/{self.runid}_{idx}') # save eigenfunctions + eigenvalues + run info
+            stab.Saveh5(FileName=f'{self.scan_saveloc}/{self.runid}_{idx}', eq = eq) # save eigenfunctions + eigenvalues + run info
             print ('Solution time: %.4E with N = %i' %(time.time()-t0, stab.grid.N))
     		#------------------------------------------------------------------
     
-            #EV = max(stab.Solution.vals)
             EV = max(stab.vals)
             
             # Calculate peakedness
@@ -615,8 +614,6 @@ class lunaScan(object):
     		
             #if self['toplot']:
                 # eq.plot(show=False)
-                #stab.Solution.PlotEigenValues()
-                #stab.Solution.PlotEigenVectors(eq, PlotDerivatives=False)
                 # stab.PlotEigenValues()
                 # stab.PlotEigenVectors(eq, PlotDerivatives=False)
     		#------------------------------------------------------------------

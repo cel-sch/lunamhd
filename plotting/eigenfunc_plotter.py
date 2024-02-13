@@ -13,7 +13,7 @@ from matplotlib.widgets import Slider, Button
 
 default_settings = {'suptitle': None,
                     'title':None,
-                    'y_axis_type':'eigenfunc', # ['eigenval','margin_stab']
+                    'y_axis_type':'eigenfunc', 
                     'x_axis_type':'initparam',
                     'fig_type':'general', # ['paper', 'singleplot']
                     'fontsizes':{'general':{'title':14,'axis':12,'suptitle':20},
@@ -148,7 +148,7 @@ class plot_EF(object):
     def plot_vals(self, scan = None):
         i = 0
         #j = 0
-        for EF_file, EF_ms in self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = self.spar_list, paramSpecs = scan).items():
+        for EF_file, EF_ms in self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = self.spar_list, paramSpecs = scan, _returnBoth = False).items():
             for m_val, EF in EF_ms.items():
                 mode = EF
                 self.axs[i].plot(self.r, mode, label=f'{m_val}') 

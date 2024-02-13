@@ -90,7 +90,7 @@ class lunaRead(object):
             return var_list
 
     def get_eigenfunc_list(self, varnrs, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
-        # Returns EF values
+        # Returns eigenfunction values
         # varnr: the number of the eigenfunction variable being plotted (will be updated with variable names eventually)
         # scanparam: the scan parameter for which we want to see several EFs
         # spar list: if only want the variable values for certain specific scanparam values, specify those here
@@ -117,8 +117,30 @@ class lunaRead(object):
                 return
             for EF_file in EF_file_list:
                 EF_list[f'{EF_file}'] = self.read_EFh5(file = EF_file, varnr = varnrs[0])
-                
-        return EF_list
+        if _returnBoth:
+            return spar_list, EF_list
+        else:
+            return EF_list
+
+    def get_profiles_list(self, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
+        # Returns the equilibrium profiles for the points specified
+        # scanparam: the scan parameter for which we want to see several EFs
+        # spar list: if only want the variable values for certain specific scanparam values, specify those here
+        # paramSpecs: any additional parameter specifications (e.g. if scan was over omega and delq, could specify which delq here) (?)      
+        if spar_list is None:
+            spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
+        else:
+            spar_list = list(spar_list)
+
+        prof_dict = {}
+        for p in spar_list:
+            paramSpecs = deepcopy(paramSpecs)
+            paramSpecs[scanparam] = p 
+            prof_dict[f'{EF_file}'] = self.read_profh5(file = EF_file)
+        if _returnBoth:
+            return spar_list, prof_dict
+        else:
+            return prof_dict
     
     def print_run_info(self):
         for key, val in self.info.items():
@@ -131,11 +153,15 @@ class lunaRead(object):
     def EF_plot(self, varnrs, scanparam = None, spar_list = None, settings = {}):
         return Plotters['EF'](self, varnrs, scanparam, spar_list, settings)
 
+    def profile_plot(self, scanparam = None, spar_list = None, settings = {}):
+        return Plotters['Profiles'](self, scanparam, spar_list, settings)
+
     ### DATA ANALYSIS FUNCTIONS ###
     def read_EFh5(self, file, varnr = 0):
         """
-        Reads h5py file for given eigenvalue run and splines the eigenfunctions.
+        Reads h5py file for given eigenvalue run and extracts the splined eigenfunctions.
         """
+        # note to self: file acts essentially as a stand-in for scanpoint
         grid = GRID()
         mode_allms = {}
         with h5py.File(file, 'r') as f:
@@ -146,6 +172,54 @@ class lunaRead(object):
                 mval = key.split("=",1)[1]
                 mode_allms[f'm={mval}'] = mode
         return mode_allms
+
+    def read_profh5(self, file):
+        """
+        Reads h5py for profile parameters.
+        """
+        # note to self: file acts essentially as a stand-in for scanpoint
+        profile_params = {}
+
+        with h5py.File(file, 'r') as f:
+            mu0 = 4.*np.pi*1.0E-07
+
+            # Unpack variables
+            B0 = f['normalisation']['B0'][()]
+            P0 = f['normalisation']['B0'][()]
+            R0 = f['normalisation']['B0'][()]
+            M02 = f['normalisation']['M02'][()]
+
+            s = f['profiles']['s'][()]
+            T = f['profiles']['T'][()]
+            q = f['profiles']['q'][()]
+            P = f['profiles']['P'][()]
+            Prot = f['profiles']['Prot'][()]
+            Omega = f['profiles']['Omega'][()]
+            U = f['profiles']['U'][()]
+            rho = f['profiles']['rho'][()]
+
+            R = f['geometry']['R'][()]
+            Z = f['geometry']['Z'][()]
+
+            profile_params['temp'] = 2*B0**2*T/(P0*mu0)
+            profile_params['q'] = q
+            profile_params['press'] = B0**2*P/mu0
+            profile_params['press_rot'] = B0**2*Prot[0]/mu0
+            profile_params['rho'] = rho
+            if M02 == 0:
+                profile_params['omega'] = np.zeros_like(s)
+            else:
+                profile_params['omega'] = Omega*B0/(M02*mu0*P0)**0.5
+            profile_params['U'] = U/R0**2
+            
+            profile_params['R'] = R
+            profile_params['R0'] = R0
+            profile_params['Z'] = Z
+
+            profile_params['s'] = s
+        
+        return profile_params
+
 
 
 

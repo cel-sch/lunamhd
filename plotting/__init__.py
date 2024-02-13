@@ -10,5 +10,6 @@ from .eigenfunc_plotter import plot_EF
 Plotters = {}
 Plotters["Growth"] = plot_growth
 Plotters["EF"] = plot_EF
+Plotters["Profiles"] = plot_profiles
 
-__all__ = ["Plotters", "EF"]
+__all__ = ["Plotters", "EF", "Profiles"]
