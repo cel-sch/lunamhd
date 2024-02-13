@@ -99,7 +99,7 @@ class lunaRead(object):
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
             spar_list = list(spar_list)
-        varnrs = [varnrs]
+        varnrs = list(varnrs)
 
         EF_file_list = []
         for p in spar_list:
@@ -117,7 +117,7 @@ class lunaRead(object):
                 return
             for EF_file in EF_file_list:
                 EF_list[f'{EF_file}'] = self.read_EFh5(file = EF_file, varnr = varnrs[0])
-
+                
         return EF_list
     
     def print_run_info(self):

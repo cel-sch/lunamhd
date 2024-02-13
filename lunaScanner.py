@@ -67,33 +67,60 @@ class lunaScan(object):
             print(f"ERROR: {key} not found")
     
     ###### READ INPUT AND INITIALISE ######
-    def _readinput(self):
-        # Reads input file.
+    def _make_param_vals(self, nodes, res, descending = True):
+        # Note: nodes should be provided in increasing order to avoid having negative paramvals (unless this is intended)
+        # No error message for above since n values are negative
+        steps = [nodes[0]]
+        step_nrs = [1]
+        for i in range(len(nodes)-1):
+            step = (nodes[i] - nodes[i+1])/res[i]
+            steps.append(step)
+            step_nrs.append(res[i])
+        deltas = np.repeat(steps, step_nrs)
+        paramvals = np.cumsum(deltas)
+        if descending:
+            paramvals = np.flip(paramvals)
+        return paramvals
+
+    def _read_scanparams(self):
         # Scanorder: list of scan parameters with order retained (it matters which is 1st)
         # Scanparams: dict of scan parameters
         self.scanparams = {}
         self.scanorder = []
 
-        inputs = f90.read(self.inputpath)
-        inputs = inputs['config_nml']
-
-        self.scanorder = inputs['scanparams']
-        if type(self.scanorder) is not list:
-            self.scanorder = [self.scanorder]
+        scanparam_info = f90.read(self.inputpath)
+        for key in [x for x in scanparam_info.keys() if 'scanparam_' in x]:
+            key_info = scanparam_info[key]
+            paramkey = key_info['paramkey']
+            self.scanorder.append(paramkey)
+            if key_info['vals'] is None:
+                paramvals = self._make_param_vals(nodes = key_info['nodes'], res = key_info['resolution'], descending = key_info['descending'])
+                self.scanparams[paramkey] = paramvals
+            else:
+                paramvals = key_info['vals']
+                self.scanparams[paramkey] = paramvals
         self.scandim = len(self.scanorder)
 
-        for key in inputs:
-            if key not in ['scantype','scanparams','runid']:
-                if key in self.scanorder:
-                    rangespecs = inputs[key]
-                    paramrange = np.linspace(rangespecs[0], rangespecs[1], rangespecs[2])
-                    self.scanparams[key] = paramrange
-                elif key in self.params:
-                    self.params[key] = inputs[key]
-                elif key in self.initialisers:
-                    self.initialisers[key] = inputs[key]
+    def _readinput(self):
+        # Reads input file.
+        self._read_scanparams()
+
+        inputs = f90.read(self.inputpath)
+        inits = inputs['initialisers']
+        fixed_params = inputs['fixed_params']
+
+        for key in fixed_params:
+            if key not in ['runid']:
+                if key in self.params:
+                    self.params[key] = fixed_params[key]
                 else:
                     print(f"ERROR: {key} is invalid input, please review.")
+
+        for key in inits:
+            if key in self.initialisers:
+                self.initialisers[key] = inits[key]
+            else:
+                print(f"ERROR: {key} is invalid initialiser, please review.")
 
     def _make_scan_list(self):
         # Makes the list of e.g. [{'beta':1,'delq':0.1},{'beta':1,'delq':0.2}]
@@ -120,7 +147,7 @@ class lunaScan(object):
         run_saveloc = Path(f"{self.outpath}/{self.runid}")
         scandir = Path.cwd() / run_saveloc
         for param in scan:
-            scandir = scandir / f'{param}_{scan[param]:.2f}'     
+            scandir = scandir / f'{param}_{scan[param]:.4f}'     
         return scandir
 
     def _build_scan_id(self, scan):
@@ -147,11 +174,15 @@ class lunaScan(object):
                 scan_subdir.mkdir(parents=True)
             else:
                 print("WARNING: Saving output to an existing file directory. Label is not unique?")
-            default_inputs = f90.read(self.inputpath)
+            old_inputs = f90.read(self.inputpath)
             for paramkey, paramval in scan.items(): # modify scanparams into their single values
-                default_inputs['config_nml'][paramkey] = paramval
-            default_inputs['config_nml']['scanparams'] = self.scanorder[0] # retain only the lowest level scan
-            default_inputs.write(scan_subdir / self.inputfile, force=True) 
+                old_inputs['fixed_params'][paramkey] = paramval
+            new_inputs = f90.Namelist()
+            new_inputs['fixed_params'] = old_inputs['fixed_params']
+            new_inputs['initialisers'] = old_inputs['initialisers']
+            new_inputs['scanparam_0'] = old_inputs['scanparam_0']
+            with open(scan_subdir / self.inputfile, 'w') as f:
+                f90.write(new_inputs, f, force=True)
             
     def _write_scan_dirs(self):
         # Writes the scan subdir paths to a file 'scan_subdirs.txt'

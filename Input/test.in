@@ -1,0 +1,39 @@
+&fixed_params
+   runid = ,
+   profile = 'rot'
+   beta0 = 0.018
+   rmaj = 10
+   a = 1
+   n = -1
+   rationalm = 1
+   sidebands = 5
+   B0 = 1
+   rs = 0
+   qs = 2
+   q0 = 1.01
+   nu_q = 8
+   nu_n = 6
+   drstep = 0.25
+/
+&initialisers
+   run_vmec = True
+   run_venus = True
+   toplot = True
+   peakedness = False
+   ev_guess_type = 'last_ev'
+   mode_type = 'KH'
+/
+&scanparam_0
+    paramkey = 'mach',
+    nodes = 0, 1, 1.5
+    resolution = 10, 10
+    vals = ,
+    descending = True
+/
+&scanparam_1
+    paramkey = 'beta0',
+    nodes = ,
+    resolution = ,
+    vals = 0.018, 0.019
+    descending = False
+/

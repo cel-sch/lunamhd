@@ -6,7 +6,7 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
-from numpy import linspace
+from numpy import linspace, sqrt, array
 
 from matplotlib.pyplot import subplots, show, ion, axes, tight_layout, rcParams
 from matplotlib.widgets import Slider, Button
@@ -99,20 +99,22 @@ class plot_EF(object):
                 subplot_nr += 1
             return factor1, factor2
 
-        rownr, colnr = row_col(subplot_nr = self.subplot_nr)
-        self.fig, self.axs = subplots(nrows = rownr, ncols = colnr, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
+        self.rownr, self.colnr = row_col(subplot_nr = self.subplot_nr)
+        self.fig, self.axs = subplots(nrows = self.rownr, ncols = self.colnr, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
+        self.axs = array(self.axs)
+        self.axs = self.axs.flatten()
+
         self.fig.set_tight_layout(True)
              
         self.scans = self.reader.info['scans']
         if self['suptitle'] is None:
-            if len(self.varnrs) > 1:
-                suptitle = ''
-                for key, val in self.reader.info['fixedparams'].items():
-                    suptitle += f"{self._getlabel(key)} = {val} "
-                suptitle = "\n".join(wrap(suptitle, 50))
-                self.fig.suptitle(suptitle,fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
-            else:
-                suptitle = f'Variable {self.varnrs[0]}'
+            suptitle = ''
+            for key, val in self.reader.info['fixedparams'].items():
+                suptitle += f"{self._getlabel(key)} = {val} "
+            if len(self.varnrs) == 1:
+                suptitle += f'Variable{self.varnrs[0]} '
+            suptitle = "\n".join(wrap(suptitle, 50))
+            self.fig.suptitle(suptitle,fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
         else:
             self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
         
@@ -125,7 +127,8 @@ class plot_EF(object):
         
     def _load_x_axis(self):
         self.xkey = self.scanparam # required for input to retrieve list of eigenfuncs
-        self.r = linspace(0.,1.,10000)
+        self.r = linspace(0.,1.,102) # need to read this properly from the h5 file probably
+        self.r = sqrt(self.r)
         self._x_ax_label = 'r'
         
     def _load_y_axis(self, axis_type):
@@ -143,24 +146,30 @@ class plot_EF(object):
             self.subplot_nr = len(self.spar_list)
 
     def plot_vals(self, scan = None):
-        EF_files, EF_ms = self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = None, paramSpecs = scan).items() # need to check what happens if paramSpecs = None
-        
-        for i, EF_key in enumerate(EF_files):
+        i = 0
+        #j = 0
+        for EF_file, EF_ms in self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = self.spar_list, paramSpecs = scan).items():
             for m_val, EF in EF_ms.items():
                 mode = EF
-                vars()['ax'+f'{i}'].plot(self.r, mode, label=f'{m_val}') 
+                self.axs[i].plot(self.r, mode, label=f'{m_val}') 
                 if self['visible']['title']:
                     # if len(self.varnrs) > 1:
                     #     vars()['ax'+f'{i}'].set_title(f'variable {self.vars[i]+1}') 
                     # else:
-                    vars()['ax'+f'{i}'].set_title(f'{EF_key}') 
+                    self.axs[i].set_title(f'{EF_file.split("/")[-1]}') 
                     
-                    vars()['ax'+f'{i}'].legend()
-                    vars()['ax'+f'{i}'].legend_.set_visible(self['visible']['legend'])
-                    
-                    vars()['ax'+f'{i}'].set_ylabel(self._y_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
-                    vars()['ax'+f'{i}'].set_xlabel(self._x_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis']) 
-        
+                self.axs[i].legend()
+                self.axs[i].legend_.set_visible(self['visible']['legend'])
+                
+                self.axs[i].set_ylabel(self._y_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
+                self.axs[i].set_xlabel(self._x_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
+            i += 1
+            # print(i, j)
+            # if i < j:
+            #     i += 1
+            # elif i == j:
+            #     j += 1
+            
     def draw_fig(self):
         self.lstyle = self['linestyles']['plain']
 
