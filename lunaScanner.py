@@ -67,15 +67,20 @@ class lunaScan(object):
             print(f"ERROR: {key} not found")
     
     ###### READ INPUT AND INITIALISE ######
-    def _make_param_vals(self, nodes, res, descending = True):
+    def _make_param_vals(self, nodes, nsteps, descending = True):
         # Note: nodes should be provided in increasing order to avoid having negative paramvals (unless this is intended)
         # No error message for above since n values are negative
         steps = [nodes[0]]
         step_nrs = [1]
-        for i in range(len(nodes)-1):
-            step = (nodes[i] - nodes[i+1])/res[i]
+        if len(nodes) > 2:
+            for i in range(len(nodes)-1):
+                step = (nodes[i] - nodes[i+1])/nsteps[i]
+                steps.append(step)
+                step_nrs.append(nsteps[i])
+        else:
+            step = (nodes[0] - nodes[-1])/nsteps
             steps.append(step)
-            step_nrs.append(res[i])
+            step_nrs.append(nsteps)
         deltas = np.repeat(steps, step_nrs)
         paramvals = np.cumsum(deltas)
         if descending:
@@ -94,7 +99,7 @@ class lunaScan(object):
             paramkey = key_info['paramkey']
             self.scanorder.append(paramkey)
             if key_info['vals'] is None:
-                paramvals = self._make_param_vals(nodes = key_info['nodes'], res = key_info['resolution'], descending = key_info['descending'])
+                paramvals = self._make_param_vals(nodes = key_info['nodes'], nsteps = key_info['nsteps'], descending = key_info['descending'])
                 self.scanparams[paramkey] = paramvals
             else:
                 paramvals = key_info['vals']
@@ -237,9 +242,7 @@ class lunaScan(object):
         return
 
     def _buildVMEC(self, idx = 0):
-        
-        self.label_FIXED = f'{self.runid}_{idx}' #Name for 1 point in scan e.g. test_1. VMEClabel is runid, produced when init_run is run
-        
+              
         #Read the default input file
         #C = VMECInput.ReadInputVMEC('/users/cs2427/lunamhd/VMEC/input/input.Default') # BUGFIX: will need to check if this works
         C = VMECInput.ReadInputVMEC('/home/csch/VENUS-linux/lunamhd/VMEC/input/input.Default') 
@@ -466,7 +469,7 @@ class lunaScan(object):
         #======================================================================
         DIR_VMEC = '/home/csch/VENUS-linux/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
         #DIR_VMEC = '/users/cs2427/lunamhd/VMEC/' # BUGFIX: MAKE SURE THIS IS SET CORRECTLY
-        Fout = 'input.'+self.label_FIXED 
+        Fout = 'input.'+f'{self.runid}_{idx}'
         if self['run_vmec']:
         	#Write the input file
             C.WriteInput(Fout)
@@ -494,12 +497,12 @@ class lunaScan(object):
             # os.system('mv mercier.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/mercier')
             # os.system('mv jxbout_'+self.label_FIXED+f'.nc /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/jxbout')
             # os.system('mv threed1.'+self.label_FIXED+f' /users/cs2427/scratch/lunamhd-data/{self.runid}/VMEC/threed1')
-            os.system('mv input.'+self.label_FIXED+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/input')
-            os.system('mv wout_'+self.label_FIXED+f'.nc /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout')
-            os.system('mv mercier.'+self.label_FIXED+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/mercier')
-            os.system('mv jxbout_'+self.label_FIXED+f'.nc /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/jxbout')
-            os.system('mv threed1.'+self.label_FIXED+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/threed1')
-            os.system('rm dcon_'+self.label_FIXED+'.txt')
+            os.system('mv input.'+f'{self.runid}_{idx}'+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/input')
+            os.system('mv wout_'+f'{self.runid}_{idx}'+f'.nc /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout')
+            os.system('mv mercier.'+f'{self.runid}_{idx}'+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/mercier')
+            os.system('mv jxbout_'+f'{self.runid}_{idx}'+f'.nc /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/jxbout')
+            os.system('mv threed1.'+f'{self.runid}_{idx}'+f' /home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/threed1')
+            os.system('rm dcon_'+f'{self.runid}_{idx}'+'.txt')
         #======================================================================
         
     ###### VENUS ######
@@ -518,10 +521,9 @@ class lunaScan(object):
         """
         
         #Read equilibrium from VMEC output file and transform it into SFL
-        self.label_FIXED = f'{self.runid}_{idx}'
-        eq = SATIRE2SFL.SATIRE2SFL(f'/home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout/wout_'+self.label_FIXED+'.nc')
-        eq.Writeh5('eq.'+self.label_FIXED+'.h5')
-        os.system('mv eq.'+self.label_FIXED+'.h5 eqFiles')
+        eq = SATIRE2SFL.SATIRE2SFL(f'/home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout/wout_'+f'{self.runid}_{idx}'+'.nc')
+        eq.Writeh5(eqFile=f'{self.scan_saveloc}/eq.{self.runid}_{idx}.h5')
+        #os.system('mv eq.'+f'{self.runid}_{idx}'+'.h5 eqFiles')
     	
     	#Create the stability object
         stab = Stability.Stability('IdealMHDFlow-Euler')
@@ -583,7 +585,7 @@ class lunaScan(object):
             print ('EV guess: %.5E + i(%.5E)'%(EVguess.real,EVguess.imag))
             #stab.Solve(EVguess,N_EV=1,EVectorsFile=f'{self.scan_saveloc}/{self.runid}_{idx}.hdf5') # runid_idx.hdf5 is where eigenvectors are stored?
             stab.Solve(EVguess,N_EV=1)
-            stab.Saveh5(FileName=f'{self.scan_saveloc}/{self.runid}_{idx}')
+            stab.Saveh5(FileName=f'{self.scan_saveloc}/{self.runid}_{idx}') # save eigenfunctions + eigenvalues + run info
             print ('Solution time: %.4E with N = %i' %(time.time()-t0, stab.grid.N))
     		#------------------------------------------------------------------
     
@@ -611,12 +613,12 @@ class lunaScan(object):
             print ('Most unstable eigenvalue')
             print ('(Gamma/OmegaA) = %.5E + i(%.5E)'%(EV.real,EV.imag))
     		
-            if self['toplot']:
-                eq.plot(stab.grid, show=False)
+            #if self['toplot']:
+                # eq.plot(show=False)
                 #stab.Solution.PlotEigenValues()
                 #stab.Solution.PlotEigenVectors(eq, PlotDerivatives=False)
-                stab.PlotEigenValues()
-                stab.PlotEigenVectors(eq, PlotDerivatives=False)
+                # stab.PlotEigenValues()
+                # stab.PlotEigenVectors(eq, PlotDerivatives=False)
     		#------------------------------------------------------------------
 
         output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.h5', 'params':self.params.copy(), 'profile':self['profile']}
@@ -635,8 +637,8 @@ class lunaScan(object):
             self.params[scanparam] = val # key needs to be the same in params and scanparams
             # Run VMEC
             if self['run_vmec']:
-                self._buildVMEC(idx = vidx) # sets self.label_FIXED inside of this function
-                eq = SATIRE2SFL.SATIRE2SFL(f'/home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout/wout_'+self.label_FIXED+'.nc')
+                self._buildVMEC(idx = vidx) # sets runid inside of this function
+                eq = SATIRE2SFL.SATIRE2SFL(f'/home/csch/VENUS-linux/lunamhd/Output/KH/{self.runid}/VMEC/wout/wout_'+f'{self.runid}_{vidx}'+'.nc')
 
             if self['run_venus']:
                 # Set EV guess and calculate the growth rate
