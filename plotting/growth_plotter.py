@@ -44,6 +44,8 @@ class plot_growth(object):
                 
         self.xkey = None
         self.ykeys = None
+
+        self.open_plot()
                 
     def __getitem__(self, key):
         if key in self.settings:

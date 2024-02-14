@@ -6,6 +6,7 @@ Created on Tue Dec 12 14:25:41 2023
 """
 from .growth_plotter import plot_growth
 from .eigenfunc_plotter import plot_EF
+from .profiles_plotter import plot_profiles
 
 Plotters = {}
 Plotters["Growth"] = plot_growth

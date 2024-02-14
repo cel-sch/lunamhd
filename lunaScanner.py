@@ -716,13 +716,19 @@ class lunaScan(object):
             
         rundata = {}
         runinfo = {}
-        for n, scan in enumerate(self.scans):
-            print(scan)
-            scandir = self._build_scan_dir(scan)
-            scanfile = sorted(scandir.glob('*.npz'))[0] # picks out the first .npz file
-            scanid = f'{runid}_{n}'
-            raw_scan = np.load(scanfile, allow_pickle = True)
-            rundata[scanid] = raw_scan['data'].item()
+        if self.scans:
+            for n, scan in enumerate(self.scans):
+                print(scan)
+                scandir = self._build_scan_dir(scan)
+                scanfile = sorted(scandir.glob('*.npz'))[0] # picks out the first .npz file
+                scanid = f'{runid}_{n}'
+                raw_scan = np.load(scanfile, allow_pickle = True)
+                rundata[scanid] = raw_scan['data'].item()
+        else:
+            runfile = sorted(run_saveloc.glob('*.npz'))[0]
+            raw_scan = np.load(runfile, allow_pickle = True)
+            rundata[runid] = raw_scan['data'].item()
+            
         runinfo['scanparams'] = self.scanparams
         fixed_params = ['profile','drstep','mach','q0','beta0','rationalm','n', 'rmaj']
         runinfo['fixedparams'] = {}

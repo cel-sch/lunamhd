@@ -6,9 +6,9 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
-from numpy import linspace, sqrt, array
+from numpy import linspace, sqrt, array, asarray
 
-from matplotlib.pyplot import subplots, show, ion, axes, tight_layout, rcParams, figure
+from matplotlib.pyplot import figure, axes, subplots, subplots_adjust, show, ion, tight_layout, rcParams
 from matplotlib.widgets import Slider, Button
 
 default_settings = {'suptitle': None,
@@ -22,12 +22,14 @@ default_settings = {'suptitle': None,
                                 'paper':[4.5,3.5]},
                     'linestyles':{'plain':'-x','asy':'D-'},
                     'markersize':2,
-                    'visible':{'suptitle':True, 'title':True, 'legend':True, 'grid':True}}
+                    'visible':{'suptitle':True, 'title':True, 'legend':True, 'grid':True, 'infoplot':True},
+                    'sliders':True}
 
 class plot_profiles(object):
-    def __init__(self, reader, varnrs, scanparam, spar_list, settings = {}):
+    def __init__(self, reader, scanparam, spar_list, settings = {}):
         self.reader = reader
         self.settings = {}
+        self.slider = None
         defaults = deepcopy(default_settings)
         
         for key in defaults:
@@ -50,9 +52,9 @@ class plot_profiles(object):
         else: 
             self.scanparam = scanparam
         if spar_list is None:
-            self.spar_list = self.reader.info['scanparams'][self.scanparam] # should only load in scan parameters which are not part of fixed parameter list
+            self.spar_list = self.reader.info['scanparams'][self.scanparam]
         else:
-            self.spar_list = list(spar_list)
+            self.spar_list = spar_list
                 
     def __getitem__(self, key):
         if key in self.settings:
@@ -78,21 +80,23 @@ class plot_profiles(object):
         if self['visible']['grid']:
             rcParams['axes.grid'] = True
 
-        self.fig = figure(figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
+        self.fig, self.ax = subplots(nrows=2, ncols=4, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
+        self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
 
-        self.fig.set_tight_layout(True)
-             
         self.scans = self.reader.info['scans']
-        if self['suptitle'] is None:
-            suptitle = ''
-            for key, val in self.reader.info['fixedparams'].items():
-                suptitle += f"{self._getlabel(key)} = {val} "
-            if len(self.varnrs) == 1:
-                suptitle += f'Variable{self.varnrs[0]} '
-            suptitle = "\n".join(wrap(suptitle, 50))
-            self.fig.suptitle(suptitle,fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
-        else:
-            self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
+        if self['sliders']:
+            self.slider_fig, self.slider_ax = subplots()
+            self.slider_ax.grid(False)
+            self.slider_ax.xaxis.set_visible(False)
+            self.slider_ax.yaxis.set_visible(False)
+            self.slider_ax.set_frame_on(False)
+            slider_subax = self.slider_ax.axes.add_child_axes(axes([0.1, 0.47, 0.8, 0.06]))
+            if self.scans:
+                self.slider = Slider(slider_subax, label='point', valmin=0, valmax=len(self.scans)*len(self.spar_list)-1, valstep=1)
+                self.slider.on_changed(self.draw_fig)
+            else:
+                self.slider = Slider(slider_subax, label='point', valmin=0, valmax=len(self.spar_list)-1, valstep=1)
+                self.slider.on_changed(self.draw_fig)
         
         self._load_x_axis()
         self._load_y_axis(self['y_axis_type'])
@@ -100,7 +104,15 @@ class plot_profiles(object):
         ion()
         show()
         self.draw_fig()
-        
+
+    def _make_point_info(self, scanval):
+        info = ''
+        for key, val in self.reader.info['fixedparams'].items():
+            info += f"{self._getlabel(key)} = {val}\n"
+        info += f"{self.scanparam} = {scanval}"
+        #info = "\n".join(wrap(info, 30))
+        return info
+
     def _load_x_axis(self):
         self.xkey = self.scanparam # required for input to retrieve list of profile files
         
@@ -111,56 +123,68 @@ class plot_profiles(object):
         if axis_type in ['profile','profiles']:
             self.ykeys = 'EF_file'
 
-    def plot_vals(self, scan = None):
-        for EF_file, prof_dict in self.reader.get_profiles_list(scanparam = self.xkey, spar_list = self.spar_list, paramSpecs = scan, _returnBoth = False).items():
-            s = prof_dict['s']
-            R = prof_dict['R']
-            R0 = prof_dict['R0']
-            Z = prof_dict['Z']
+    def plot_vals(self, scan = {}):
+        val = self.slider.val if self.slider is not None else 0
+        for key, vals in self.reader.get_profiles_list(scanparam = self.xkey, spar_list = self.spar_list[val], paramSpecs = scan, _returnBoth = False).items():
+            EF_file = key
+            prof_dict = vals
+        EF_file = EF_file.split('/')[-1]
 
-            ax1 = self.fig.add_subplot(2,4,1)
-            ax1.plot(s, prof_dict['temp'])
-            ax1.set_ylabel(r'$T/T_0$')
-            ax1.set_xlabel('s')
+        s = prof_dict['s']
+        R = prof_dict['R']
+        R0 = prof_dict['R0']
+        Z = prof_dict['Z']
 
-            ax2 = self.fig.add_subplot(2,4,2)
-            ax2.plot(s, prof_dict['q'])
-            ax2.set_ylabel(r'q')
-            ax2.set_xlabel('s')
+        self.ax[0,0].cla()
+        self.ax[0,0].plot(s, prof_dict['temp'])
+        self.ax[0,0].set_ylabel(r'$T/T_0$')
+        self.ax[0,0].set_xlabel('s')
 
-            ax3 = self.fig.add_subplot(2,4,3)
-            ax3.plot(s, prof_dict['press'], label=r'$P(s)$')
-            ax3.plot(s, prof_dict['press_rot'], label=r'$P(s)e^{U(R^2-R_0^2)}$')
-            ax3.legend()
-            ax3.tick_params('x', labelbottom=False)
-            ax3.set_ylabel(r'$\bar{P}$ [Pa]')
-            ax3.set_xlabel('s')
+        self.ax[0,1].cla()
+        self.ax[0,1].plot(s, prof_dict['q'])
+        self.ax[0,1].set_ylabel(r'q')
+        self.ax[0,1].set_xlabel('s')
 
-            ax4 = self.fig.add_subplot(2,4,4)
-            ax4.plot(R[:,-1]*R0, Z[:,-1]*R0)
-            ax4.plot(R[0,0]*R0, Z[0,0]*R0,'+')
-            ax4.set_xlabel(r'R [m]')
-            ax4.set_ylabel(r'Z [m]')
-            ax4.set_aspect('equal')
+        self.ax[0,2].cla()
+        self.ax[0,2].plot(s, prof_dict['press'], label=r'$P(s)$')
+        self.ax[0,2].plot(s, prof_dict['press_rot'], label=r'$P(s)e^{U(R^2-R_0^2)}$')
+        self.ax[0,2].legend()
+        self.ax[0,2].tick_params('x', labelbottom=False)
+        self.ax[0,2].set_ylabel(r'$\bar{P}$ [Pa]')
+        self.ax[0,2].set_xlabel('s')
 
-            ax5 = self.fig.add_subplot(2,4,5)
-            ax5.plot(s, prof_dict['U'])
-            ax5.set_ylabel(r'$U$ $[m^{-2}]$')
-            ax5.set_xlabel('s')
+        self.ax[0,3].cla()
+        self.ax[0,3].plot(R[:,-1]*R0, Z[:,-1]*R0)
+        self.ax[0,3].plot(R[0,0]*R0, Z[0,0]*R0,'+')
+        self.ax[0,3].set_xlabel(r'R [m]')
+        self.ax[0,3].set_ylabel(r'Z [m]')
+        self.ax[0,3].set_aspect('equal')
 
-            ax6 = self.fig.add_subplot(2,4,6)
-            ax6.plot(s, prof_dict['rho'])
-            ax6.set_ylabel(r'$\bar{\rho}/\rho_0$')
-            ax6.set_xlabel('s')
+        self.ax[1,0].cla()
+        self.ax[1,0].plot(s, prof_dict['U'])
+        self.ax[1,0].set_ylabel(r'$U$ $[m^{-2}]$')
+        self.ax[1,0].set_xlabel('s')
 
-            ax7 = fig.add_subplot(2,4,7)
-            ax7.plot(s, prof_dict['omega'])
-            ax7.set_ylabel(r'$Ω/Ω_0$')
-            ax7.set_xlabel('s')
+        self.ax[1,1].cla()
+        self.ax[1,1].plot(s, prof_dict['rho'])
+        self.ax[1,1].set_ylabel(r'$\bar{\rho}/\rho_0$')
+        self.ax[1,1].set_xlabel('s')
+
+        self.ax[1,2].cla()
+        self.ax[1,2].plot(s, prof_dict['omega'])
+        self.ax[1,2].set_ylabel(r'$Ω/Ω_0$')
+        self.ax[1,2].set_xlabel('s')
+
+        self.ax[1,3].cla()
+        self.ax[1,3].grid(False)
+        self.ax[1,3].xaxis.set_visible(False)
+        self.ax[1,3].yaxis.set_visible(False)
+        self.ax[1,3].set_frame_on(False)
+        self.ax[1,3].text(0,0,self._make_point_info(scanval = self.spar_list[val]))
+        if not self['visible']['infoplot']:
+            self.ax[1,3].set_axis_off()
             
-    def draw_fig(self):
-        self.lstyle = self['linestyles']['plain']
-
+    def draw_fig(self, slider_idx=None):
         if self.scans:
             for scan in self.scans: 
                 print(scan)

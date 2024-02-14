@@ -77,7 +77,10 @@ class lunaRead(object):
         if spar_list is None:
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
-            spar_list = list(spar_list)
+            if type(spar_list) in [list, np.ndarray]:
+                spar_list = list(spar_list)
+            else:
+                spar_list = [spar_list]
             
         var_list = []
         for p in spar_list:
@@ -98,8 +101,15 @@ class lunaRead(object):
         if spar_list is None:
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
-            spar_list = list(spar_list)
-        varnrs = list(varnrs)
+            if type(spar_list) in [list, np.ndarray]:
+                spar_list = list(spar_list)
+            else:
+                spar_list = [spar_list]
+
+        if type(spar_list) in [list, np.ndarray]:
+                varnrs = list(varnrs)
+        else:
+            varnrs = [varnrs]
 
         EF_file_list = []
         for p in spar_list:
@@ -130,13 +140,18 @@ class lunaRead(object):
         if spar_list is None:
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
-            spar_list = list(spar_list)
+            if type(spar_list) in [list, np.ndarray]:
+                spar_list = list(spar_list)
+            else:
+                spar_list = [spar_list]
 
         prof_dict = {}
         for p in spar_list:
             paramSpecs = deepcopy(paramSpecs)
-            paramSpecs[scanparam] = p 
+            paramSpecs[scanparam] = p
+            EF_file = self('EF_file', paramSpecs)
             prof_dict[f'{EF_file}'] = self.read_profh5(file = EF_file)
+        
         if _returnBoth:
             return spar_list, prof_dict
         else:
