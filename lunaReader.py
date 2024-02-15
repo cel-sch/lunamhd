@@ -93,11 +93,11 @@ class lunaRead(object):
             return var_list
 
     def get_eigenfunc_list(self, varnrs, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
-        # Returns eigenfunction values
+        # Returns all specified variable number (varnrs) eigenfunctions for the points specified
         # varnr: the number of the eigenfunction variable being plotted (will be updated with variable names eventually)
         # scanparam: the scan parameter for which we want to see several EFs
         # spar list: if only want the variable values for certain specific scanparam values, specify those here
-        # paramSpecs: any additional parameter specifications (e.g. if scan was over omega and delq, could specify which delq here) (?)      
+        # paramSpecs: any additional parameter specifications (e.g. if scan was over omega and delq, could specify to look at several delqs here) (?)  
         if spar_list is None:
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
@@ -111,26 +111,17 @@ class lunaRead(object):
         else:
             varnrs = [varnrs]
 
-        EF_file_list = []
+        EF_dict = {}
         for p in spar_list:
             paramSpecs = deepcopy(paramSpecs)
-            paramSpecs[scanparam] = p 
-            EF_file_list.append(self('EF_file', paramSpecs))
-            
-        EF_list = {}
-        if len(EF_file_list) == 1: # looking at one point
+            paramSpecs[scanparam] = p
+            EF_file = self('EF_file', paramSpecs)
             for varnr in varnrs:
-                EF_list[f'varnr_{varnr+1}'] = self.read_EFh5(file = EF_file_list[0], varnr = varnr)
-        elif len(EF_file_list) > 1: # looking at multiple points
-            if len(varnrs) > 1:
-                print("ERROR: trying to retrieve multiple eigenfunctions for multiple scan points. Either specify one scan point or one eigenfunction to look at.")
-                return
-            for EF_file in EF_file_list:
-                EF_list[f'{EF_file}'] = self.read_EFh5(file = EF_file, varnr = varnrs[0])
+                EF_dict[f'{EF_file}'][f'varnr_{varnr+1}'] = self.read_EFh5(file = EF_file, varnr = varnr)
         if _returnBoth:
-            return spar_list, EF_list
+            return spar_list, EF_dict
         else:
-            return EF_list
+            return EF_dict
 
     def get_profiles_list(self, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
         # Returns the equilibrium profiles for the points specified

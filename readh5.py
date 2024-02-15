@@ -45,6 +45,9 @@ def readh5_EF(file, varnr = 0):
     return modes
     
 def readh5_profs(file, show = True):
+    """
+    Reads h5py file for the equilibrium profiles. Plots them.
+    """
     with h5py.File(file, 'r') as f:
         mu0 = 4.*np.pi*1.0E-07
 
