@@ -55,6 +55,8 @@ class plot_profiles(object):
             self.spar_list = self.reader.info['scanparams'][self.scanparam]
         else:
             self.spar_list = spar_list
+
+        self.open_plot()
                 
     def __getitem__(self, key):
         if key in self.settings:

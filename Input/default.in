@@ -1,5 +1,4 @@
 &fixed_params
-   runid = ,
    profile = 'rot'
    beta0 = 0.018
    rmaj = 10
@@ -23,10 +22,13 @@
    ev_guess_type = 'last_ev'
    mode_type = 'KH'
 /
+&info
+   runid = ,
+   description = ,
+/
 &scanparam_0
     paramkey = 'mach',
     nodes = 0.5, 0.6
     nsteps = 2
     vals = ,
     descending = True
-/

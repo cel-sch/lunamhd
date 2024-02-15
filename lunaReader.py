@@ -162,7 +162,7 @@ class lunaRead(object):
             print(f"{key}: val")
 
     ### PLOT FUNCTIONS ###
-    def basic_plot(self, settings = {}):
+    def EV_plot(self, settings = {}):
         return Plotters['Growth'](self, settings)
 
     def EF_plot(self, varnrs, scanparam = None, spar_list = None, settings = {}):
