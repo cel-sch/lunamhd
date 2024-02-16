@@ -19,8 +19,10 @@ class lunaRead(object):
         self.dataFile = filePath / f'{filename}.npz'
         self._get_run_data()
 
-    def __call__(self, variable, paramSpecs):
+    def __call__(self, variable, paramSpecs, _returnFirst = True):
         #print(f'paramSpecs={paramSpecs}, variable={variable}') # these print correctly
+        # _returnFirst is a flag for whether you want call to return the first match for a variable it encounters
+        # if _returnFirst = False, a list of values is returned (not yet implemented)
         scankey, pointkey = self.get_point_label(paramSpecs=paramSpecs)
         if pointkey:
             scan = self.data[scankey]
@@ -47,6 +49,13 @@ class lunaRead(object):
         self.data = data  # data isn't building correctly
         self.info = info
         return
+
+    def _make_list(self, var):
+        if type(var) in [list, np.ndarray]:
+            var = list(var)
+        else:
+            var = [var]
+        return var
 
     def get_point_label(self, paramSpecs):
         # NOTE: this relies on ordered dictionaries and will not work for python versions older than 3.6
@@ -77,10 +86,7 @@ class lunaRead(object):
         if spar_list is None:
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
-            if type(spar_list) in [list, np.ndarray]:
-                spar_list = list(spar_list)
-            else:
-                spar_list = [spar_list]
+            spar_list = self._make_list(spar_list)
             
         var_list = []
         for p in spar_list:
@@ -101,21 +107,16 @@ class lunaRead(object):
         if spar_list is None:
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
-            if type(spar_list) in [list, np.ndarray]:
-                spar_list = list(spar_list)
-            else:
-                spar_list = [spar_list]
+            spar_list = self._make_list(spar_list)
 
-        if type(spar_list) in [list, np.ndarray]:
-                varnrs = list(varnrs)
-        else:
-            varnrs = [varnrs]
+        varnrs = self._make_list(varnrs)
 
         EF_dict = {}
         for p in spar_list:
             paramSpecs = deepcopy(paramSpecs)
             paramSpecs[scanparam] = p
             EF_file = self('EF_file', paramSpecs)
+            EF_dict[f'{EF_file}'] = {}
             for varnr in varnrs:
                 EF_dict[f'{EF_file}'][f'varnr_{varnr+1}'] = self.read_EFh5(file = EF_file, varnr = varnr)
         if _returnBoth:
@@ -131,10 +132,7 @@ class lunaRead(object):
         if spar_list is None:
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
-            if type(spar_list) in [list, np.ndarray]:
-                spar_list = list(spar_list)
-            else:
-                spar_list = [spar_list]
+            spar_list = self._make_list(spar_list)
 
         prof_dict = {}
         for p in spar_list:
@@ -161,6 +159,10 @@ class lunaRead(object):
 
     def profile_plot(self, scanparam = None, spar_list = None, settings = {}):
         return Plotters['Profiles'](self, scanparam, spar_list, settings)
+
+    def multi_plot(self, readers = [], settings = {}):
+        readers.insert(0, self)
+        return Plotters['Multi'](readers, settings)
 
     ### DATA ANALYSIS FUNCTIONS ###
     def read_EFh5(self, file, varnr = 0):

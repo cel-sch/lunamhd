@@ -27,8 +27,9 @@
    description = ,
 /
 &scanparam_0
-    paramkey = 'mach',
-    nodes = 0.5, 0.6
-    nsteps = 2
-    vals = ,
-    descending = True
+   paramkey = 'mach',
+   nodes = 0.5, 0.6
+   nsteps = 2
+   vals = ,
+   descending = True
+/

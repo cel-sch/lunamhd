@@ -8,7 +8,7 @@ from copy import deepcopy
 from textwrap import wrap
 from numpy import linspace, sqrt, array, asarray
 
-from matplotlib.pyplot import figure, axes, subplots, subplots_adjust, show, ion, tight_layout, rcParams
+from matplotlib.pyplot import figure, axes, subplots, show, ion, tight_layout, rcParams
 from matplotlib.widgets import Slider, Button
 
 default_settings = {'suptitle': None,
@@ -78,14 +78,17 @@ class plot_profiles(object):
         self.fig.savefig(plotfilename)
         
     def open_plot(self):
-        # Creates figure and axes
+        # Creates figure, axes and slider
         if self['visible']['grid']:
             rcParams['axes.grid'] = True
 
         self.fig, self.ax = subplots(nrows=2, ncols=4, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
         self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
+        self.fig.set_tight_layout(True)
 
         self.scans = self.reader.info['scans']
+
+        # Make slider
         if self['sliders']:
             self.slider_fig, self.slider_ax = subplots()
             self.slider_ax.grid(False)

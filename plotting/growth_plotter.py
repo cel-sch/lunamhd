@@ -66,17 +66,14 @@ class plot_growth(object):
             plotfilename = ''.join([i for i in str(plotfilename)[:-4]])
         self.fig.savefig(plotfilename)
         
-    def open_plot(self, plotfilename = None, ykey = None):
+    def open_plot(self, ykey = None):
         # Creates figure and axes
         self.fig, self.ax = subplots(figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
         self.fig.set_tight_layout(True)
              
         self.scans = self.reader.info['scans']
         if self['suptitle'] is None:
-            suptitle = ''
-            for key, val in self.reader.info['fixedparams'].items():
-                suptitle += f"{self._getlabel(key)} = {val} "
-            suptitle = "\n".join(wrap(suptitle, 50))
+            suptitle = self._make_point_info()
             self.fig.suptitle(suptitle,fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
         else:
             self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
@@ -90,6 +87,13 @@ class plot_growth(object):
         ion()
         show()
         self.draw_fig()
+
+    def _make_point_info(self):
+        info = ''
+        for key, val in self.reader.info['fixedparams'].items():
+            info += f"{self._getlabel(key)} = {val} "
+        info = "\n".join(wrap(info, 50))
+        return info
         
     def _load_x_axis(self, axis_type):
         if axis_type not in ['initparam']:

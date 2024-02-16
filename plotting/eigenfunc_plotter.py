@@ -8,7 +8,7 @@ from copy import deepcopy
 from textwrap import wrap
 from numpy import linspace, sqrt, array
 
-from matplotlib.pyplot import subplots, show, ion, axes, tight_layout, rcParams
+from matplotlib.pyplot import figure, axes, subplots, show, ion, tight_layout, rcParams
 from matplotlib.widgets import Slider, Button
 
 default_settings = {'suptitle': None,
@@ -22,12 +22,14 @@ default_settings = {'suptitle': None,
                                 'paper':[4.5,3.5]},
                     'linestyles':{'plain':'-x','asy':'D-'},
                     'markersize':2,
-                    'visible':{'suptitle':True, 'title':True, 'legend':True, 'grid':True}}
+                    'visible':{'suptitle':True, 'title':True, 'legend':True, 'grid':True},
+                    'sliders':True}
 
 class plot_EF(object):
     def __init__(self, reader, varnrs, scanparam, spar_list, settings = {}):
         self.reader = reader
         self.settings = {}
+        self.slider = None
         defaults = deepcopy(default_settings)
         
         for key in defaults:
@@ -52,9 +54,10 @@ class plot_EF(object):
         if spar_list is None:
             self.spar_list = self.reader.info['scanparams'][self.scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
-            self.spar_list = list(spar_list)
-        self.varnrs = [varnrs]
-        self._calc_subplot_nr()
+            self.spar_list = spar_list
+        self.varnrs = self.reader._make_list(varnrs)
+
+        self.open_plot()
                 
     def __getitem__(self, key):
         if key in self.settings:
@@ -76,12 +79,15 @@ class plot_EF(object):
         self.fig.savefig(plotfilename)
         
     def open_plot(self):
-        # Creates figure and axes
+        # Creates figure, axes and slider
         if self['visible']['grid']:
             rcParams['axes.grid'] = True
 
         def row_col(subplot_nr):
             # Finds the number of rows and columns best to use for EF subplots depending on the number of subplots
+            if subplot_nr == 1:
+                return 1, 1
+
             def close_factors(subplot_nr):
                 # Find closest pair of factors for subplot_nr to have a nice arrangement of the subplots
                 factor1 = 0
@@ -99,24 +105,30 @@ class plot_EF(object):
                 subplot_nr += 1
             return factor1, factor2
 
-        self.rownr, self.colnr = row_col(subplot_nr = self.subplot_nr)
-        self.fig, self.axs = subplots(nrows = self.rownr, ncols = self.colnr, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
-        self.axs = array(self.axs)
-        self.axs = self.axs.flatten()
-
-        self.fig.set_tight_layout(True)
-             
-        self.scans = self.reader.info['scans']
+        self.rownr, self.colnr = row_col(subplot_nr = len(self.varnrs))
+        self.fig, self.ax = subplots(nrows=self.rownr, ncols=self.colnr, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
         if self['suptitle'] is None:
-            suptitle = ''
-            for key, val in self.reader.info['fixedparams'].items():
-                suptitle += f"{self._getlabel(key)} = {val} "
-            if len(self.varnrs) == 1:
-                suptitle += f'Variable{self.varnrs[0]} '
-            suptitle = "\n".join(wrap(suptitle, 50))
-            self.fig.suptitle(suptitle,fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
-        else:
-            self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
+            self.settings['suptitle'] = self._make_point_info()
+        self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
+        self.fig.set_tight_layout(True)
+        self.ax = array(self.ax)
+        self.ax = self.ax.flatten()
+        
+        # Make slider    
+        self.scans = self.reader.info['scans']
+        if self['sliders']:
+            self.slider_fig, self.slider_ax = subplots()
+            self.slider_ax.grid(False)
+            self.slider_ax.xaxis.set_visible(False)
+            self.slider_ax.yaxis.set_visible(False)
+            self.slider_ax.set_frame_on(False)
+            slider_subax = self.slider_ax.axes.add_child_axes(axes([0.1, 0.47, 0.8, 0.06]))
+            if self.scans:
+                self.slider = Slider(slider_subax, label='point', valmin=0, valmax=len(self.scans)*len(self.spar_list)-1, valstep=1)
+                self.slider.on_changed(self.draw_fig)
+            else:
+                self.slider = Slider(slider_subax, label='point', valmin=0, valmax=len(self.spar_list)-1, valstep=1)
+                self.slider.on_changed(self.draw_fig)
         
         self._load_x_axis()
         self._load_y_axis(self['y_axis_type'])
@@ -124,6 +136,15 @@ class plot_EF(object):
         ion()
         show()
         self.draw_fig()
+
+    def _make_point_info(self):
+        # Does not currently include value of scanparam
+        info = ''
+        for key, val in self.reader.info['fixedparams'].items():
+            info += f"{self._getlabel(key)} = {val}\n"
+        #info += f"{self.scanparam} = {scanval}"
+        info = "\n".join(wrap(info, 50))
+        return info
         
     def _load_x_axis(self):
         self.xkey = self.scanparam # required for input to retrieve list of eigenfuncs
@@ -139,42 +160,27 @@ class plot_EF(object):
             self.ykeys = 'EF_file'
             self._y_ax_label = 'a.u.'
 
-    def _calc_subplot_nr(self):
-        if len(self.varnrs) > 1: # drawing several EFs for one point
-            self.subplot_nr = len(self.varnrs)
-        else: # drawing one EF for several points
-            self.subplot_nr = len(self.spar_list)
+    def plot_vals(self, scan = {}):
+        val = self.slider.val if self.slider is not None else 0
+        for key, vals in self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = self.spar_list[val], paramSpecs = scan, _returnBoth = False).items():
+            EF_file = key
+            EF = vals # dictionary like {'var_1':..., 'var_2':..., ...}
 
-    def plot_vals(self, scan = None):
-        i = 0
-        #j = 0
-        for EF_file, EF_ms in self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = self.spar_list, paramSpecs = scan, _returnBoth = False).items():
-            for m_val, EF in EF_ms.items():
-                mode = EF
-                self.axs[i].plot(self.r, mode, label=f'{m_val}') 
+        for i, (var_key, var_allms) in enumerate(EF.items()):
+            self.ax[i].cla()
+            for m_val, mode in var_allms.items():
+                self.ax[i].plot(self.r, mode, label=f'{m_val}') 
                 if self['visible']['title']:
-                    # if len(self.varnrs) > 1:
-                    #     vars()['ax'+f'{i}'].set_title(f'variable {self.vars[i]+1}') 
-                    # else:
-                    self.axs[i].set_title(f'{EF_file.split("/")[-1]}') 
-                    
-                self.axs[i].legend()
-                self.axs[i].legend_.set_visible(self['visible']['legend'])
+                    self.ax[i].set_title(f'Variable {self.varnrs[i]+1}, {self._getlabel(self.xkey)} = {self.spar_list[val]}')
+                self.ax[i].legend()
+                self.ax[i].legend_.set_visible(self['visible']['legend'])
                 
-                self.axs[i].set_ylabel(self._y_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
-                self.axs[i].set_xlabel(self._x_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
-            i += 1
-            # print(i, j)
-            # if i < j:
-            #     i += 1
-            # elif i == j:
-            #     j += 1
+                self.ax[i].set_ylabel(self._y_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
+                self.ax[i].set_xlabel(self._x_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
             
-    def draw_fig(self):
-        self.lstyle = self['linestyles']['plain']
-
+    def draw_fig(self, slider_idx=None):
         if self.scans:
-            for scan in self.scans: # desired behavior for ND scans: plot several figs
+            for scan in self.scans:
                 print(scan)
                 self.plot_vals(scan = scan)
         else:

@@ -24,7 +24,7 @@ from VenusMHDpy.library import find_nearest
 class lunaScan(object):
     def __init__(self, runid = None, inputfile = None, inputpath = None):
         profiles = ['rho_t', 'rho_p', 'pt', 'rot']
-        self.params = {'profile':'rho_t', 'mach':0.0, 'beta0':0.05, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5,
+        self.params = {'profile':'rho_t', 'mach':0.0, 'omegahat':0.0, 'beta0':0.05, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5,
                         'd':0., 'el':0., 'tr':0., 'mpol':15, 'ntor':0, 'rstep':0.5, 'drstep':0.15, 
                         'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'q0':0.938, 'qs':None, 'nu_q':2.}
         
@@ -40,9 +40,9 @@ class lunaScan(object):
         self.inputpath = inputpath
         if self.inputpath is None:
             #self.inputpath = f'/users/cs2427/lunamhd/Input/{self.inputfile}'
-            self.inputpath = f'/home/csch/VENUS-linux/lunamhd/Input/{self.inputfile}'
+            self.inputpath = Path(f'/home/csch/VENUS-linux/lunamhd/Input/{self.inputfile}')
         else:
-            self.inputpath = self.inputpath + '/' + self.inputfile
+            self.inputpath = Path(self.inputpath + '/' + self.inputfile)
         ### Define outpath
         if self['mode_type'] == 'KH':
             #self.outpath = Path('/users/cs2427/scratch/lunamhd-data/KH') # for running on viking
@@ -556,6 +556,12 @@ class lunaScan(object):
         eq.BuildInGrid(stab.grid)
     	
         V0_Va = np.sqrt(eq.M02*eq.mu0*eq.P0)/eq.B0
+        # Calculate Omegahat, rotation frequency as normalized in 2013 PPCF
+        eps_a = self['a']/self['rmaj']
+        betahat = 2*eq.mu0*eq.P0/eq.B0**2/eps_a**2
+        Omegahat = np.sqrt(eq.M02*2*eq.mu0*eq.P0)/(eq.B0*eps_a)
+        self.params['omegahat'] = Omegahat
+        # Print equilibrium quantities
         print ('Parameters at the magnetic axis:')
         print ('   M0    = %.5f'%(np.sqrt(eq.M02)))
         print ('   v0/vA = %.5f'%(V0_Va))
@@ -611,12 +617,6 @@ class lunaScan(object):
     		
             print ('Most unstable eigenvalue')
             print ('(Gamma/OmegaA) = %.5E + i(%.5E)'%(EV.real,EV.imag))
-    		
-            #if self['toplot']:
-                # eq.plot(show=False)
-                # stab.PlotEigenValues()
-                # stab.PlotEigenVectors(eq, PlotDerivatives=False)
-    		#------------------------------------------------------------------
 
         output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.h5', 'params':self.params.copy(), 'profile':self['profile']}
         
@@ -738,6 +738,7 @@ class lunaScan(object):
         runinfo['scanorder'] = self.scanorder
         runinfo['scans'] = self.scans
         runinfo['timestamp'] = datetime.now().strftime("%d-%m-%y_%H:%M")
+        runinfo['runid'] = self.runid
         
         fOut = f"{run_saveloc}/{self.runid}.npz"
         
