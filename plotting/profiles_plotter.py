@@ -192,7 +192,6 @@ class plot_profiles(object):
     def draw_fig(self, slider_idx=None):
         if self.scans:
             for scan in self.scans: 
-                print(scan)
                 self.plot_vals(scan = scan)
         else:
             self.plot_vals()

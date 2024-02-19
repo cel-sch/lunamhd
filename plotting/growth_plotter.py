@@ -15,6 +15,7 @@ default_settings = {'suptitle': None,
                     'y_axis_type':'eigenval', # ['eigenval','margin_stab']
                     'x_axis_type':'initparam',
                     'EV_visible':{'gam':True, 'wr':False},
+                    'EV_guess':True,
                     'fig_type':'general', # ['paper', 'singleplot']
                     'fontsizes':{'general':{'title':14,'axis':12,'suptitle':20},
                                  'paper':{'title':10,'axis':9,'suptitle':12}},
@@ -124,6 +125,10 @@ class plot_growth(object):
         if self['EV_visible']['gam']:
             gam_vals = [i.real for i in y_vals]
             self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
+            if 'EV_guess':
+                _, gam_guess_vals = self.reader.get_1d_list(self.xkey, 'EVguess', paramSpecs = scan)
+                gam_guess_vals = [i.real for i in gam_guess_vals]
+                self.ax.plot(x_vals, gam_guess_vals, self.lstyle, label=f'{self.scanlabel} guess', markersize=self['markersize'])
         if self['EV_visible']['wr']:
             wr_vals = [i.imag for i in y_vals]
             self.ax.plot(x_vals, wr_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])

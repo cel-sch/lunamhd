@@ -219,7 +219,6 @@ class plot_multi(object):
             scans = self.scans[f'{reader}']
             if scans:
                 for scan in scans:
-                    print(scan)
                     self.plot_vals(reader = reader, scan = scan)
             else:
                 self.plot_vals(reader = reader)

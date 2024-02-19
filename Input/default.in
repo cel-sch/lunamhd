@@ -1,25 +1,25 @@
 &fixed_params
-   profile = 'rot'
+   profile = 'rho_p'
    beta0 = 0.018
    rmaj = 10
    a = 1
    n = -1
-   rationalm = 1
+   rationalm = 2
    sidebands = 5
-   B0 = 1
+   b0 = 1
    rs = 0
    qs = 2
-   q0 = 1.01
+   q0 = 2.01
    nu_q = 8
    nu_n = 6
-   drstep = 0.25
+   drstep = 0.4
+   init_evguess = 0.1
 /
 &initialisers
    run_vmec = True
    run_venus = True
-   toplot = True
    peakedness = False
-   ev_guess_type = 'last_ev'
+   ev_guess_type = 'polynom_ev'
    mode_type = 'KH'
 /
 &info
@@ -28,8 +28,8 @@
 /
 &scanparam_0
    paramkey = 'mach',
-   nodes = 0.5, 0.6
-   nsteps = 2
+   nodes = 0.5, 1
+   nsteps = 15
    vals = ,
-   descending = True
+   descending = False
 /

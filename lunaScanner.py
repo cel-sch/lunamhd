@@ -24,7 +24,7 @@ from VenusMHDpy.library import find_nearest
 class lunaScan(object):
     def __init__(self, runid = None, inputfile = None, inputpath = None):
         profiles = ['rho_t', 'rho_p', 'pt', 'rot']
-        self.params = {'profile':'rho_t', 'mach':0.0, 'omegahat':0.0, 'beta0':0.05, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5,
+        self.params = {'profile':'rho_t', 'mach':0.0, 'omegahat':0.0, 'beta0':0.05, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5, 'init_evguess':1E-1,
                         'd':0., 'el':0., 'tr':0., 'mpol':15, 'ntor':0, 'rstep':0.5, 'drstep':0.15, 
                         'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'q0':0.938, 'qs':None, 'nu_q':2.}
         
@@ -74,11 +74,11 @@ class lunaScan(object):
         step_nrs = [1]
         if len(nodes) > 2:
             for i in range(len(nodes)-1):
-                step = (nodes[i] - nodes[i+1])/nsteps[i]
+                step = (nodes[i+1] - nodes[i])/nsteps[i]
                 steps.append(step)
                 step_nrs.append(nsteps[i])
         else:
-            step = (nodes[0] - nodes[-1])/nsteps
+            step = (nodes[-1] - nodes[0])/nsteps
             steps.append(step)
             step_nrs.append(nsteps)
         deltas = np.repeat(steps, step_nrs)
@@ -583,7 +583,7 @@ class lunaScan(object):
             if EVguess == None:
                 idx_rstep = find_nearest(stab.grid.S, self['rstep'])
                 #EV_guess = 1.0E-1 + (1.0j)*abs(n)*eq.Omega[idx_rstep] # want to re-implement this
-                EVguess = 1E-1
+                EVguess = self['init_evguess']
                 EVguess = EVguess + (1.0j)*abs(n)*eq.Omega[0]
             #elif EV_guess == 'bad': #EV_guess.real < 1.0E-07 # an attempt at correcting when the EV guesses get bad
                 #idx_rstep = find_nearest(stab.grid.S, self.profParams['rstep'])
@@ -640,22 +640,24 @@ class lunaScan(object):
             if self['run_venus']:
                 # Set EV guess and calculate the growth rate
                 if self['ev_guess_type'] == 'last_ev':
-                    if vidx <= 2:
+                    if vidx <= 1:
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = None, idx = vidx)
                     else:
                         lastrun = output1d[f'{scanid}_{vidx-1}']
                         EVguess = lastrun['EV']
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = EVguess, idx = vidx)
-                elif self['ev_guess_type'] == 'polynom_EV':
+                elif self['ev_guess_type'] == 'polynom_ev':
                     ws = [] # BUGFIX: this is probably gonna be a problem for re-running scans halfway through, going to need to find a way to read results as they're being made
                     if vidx <= 3:
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = None, idx = vidx)
-                        ws.append(output1d[f'{scanid}_{vidx}']['EV'])
                     else:
                         polycoeff = vidx - 3
                         if polycoeff > 5:
                             polycoeff = 5
-
+                        ws = []
+                        for i in range(vidx):
+                            ws.append(output1d[f'{scanid}_{vidx-(i+1)}']['EV'])
+                        print(ws)
                         guessReal = np.polyfit(np.asarray(self.scanparams[scanparam][:vidx]),np.asarray([i.real for i in ws[:vidx]]),polycoeff)
                         guessImag = np.polyfit(np.asarray(self.scanparams[scanparam][:vidx]),np.asarray([i.imag for i in ws[:vidx]]),polycoeff)
                         
