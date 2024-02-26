@@ -6,7 +6,7 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
-from numpy import linspace, sqrt, array
+from numpy import linspace, sqrt, array, float64
 
 from matplotlib.pyplot import figure, axes, subplots, show, ion, tight_layout, rcParams
 from matplotlib.widgets import Slider, Button
@@ -138,11 +138,12 @@ class plot_EF(object):
         self.draw_fig()
 
     def _make_point_info(self):
-        # Does not currently include value of scanparam
         info = ''
         for key, val in self.reader.info['fixedparams'].items():
-            info += f"{self._getlabel(key)} = {val}\n"
-        #info += f"{self.scanparam} = {scanval}"
+            if type(val) in ['int', float, float64]:
+                info += f"{self._getlabel(key)} = {val:.4f}\n"
+            else:
+                info += f"{self._getlabel(key)} = {val}\n"
         info = "\n".join(wrap(info, 50))
         return info
         
@@ -171,7 +172,7 @@ class plot_EF(object):
             for m_val, mode in var_allms.items():
                 self.ax[i].plot(self.r, mode, label=f'{m_val}') 
                 if self['visible']['title']:
-                    self.ax[i].set_title(f'Variable {self.varnrs[i]+1}, {self._getlabel(self.xkey)} = {self.spar_list[val]}')
+                    self.ax[i].set_title(f'Variable {self.varnrs[i]+1}, {self._getlabel(self.xkey)} = {self.spar_list[val]:.4f}')
                 self.ax[i].legend()
                 self.ax[i].legend_.set_visible(self['visible']['legend'])
                 

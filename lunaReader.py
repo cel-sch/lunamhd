@@ -11,9 +11,10 @@ from lunamhd.plotting import Plotters
 class lunaRead(object):
     def __init__(self, filename, filePath = None):
         self.filename = filename
+        self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
+        #self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
         if filePath is None:
-                #filePath = Path(f'/users/cs2427/scratch/lunamhd-data/KH/{filename}')
-                filePath = Path(f'/home/csch/VENUS-linux/lunamhd/Output/KH/{filename}')
+                filePath = Path(self.outputpath_root / 'KH' / f'{self.filename}')
         else:
             filePath = Path(filePath)
         self.dataFile = filePath / f'{filename}.npz'

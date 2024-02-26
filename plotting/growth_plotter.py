@@ -6,6 +6,7 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
+from numpy import float64
 
 from matplotlib.pyplot import subplots, show, ion, axes, tight_layout
 from matplotlib.widgets import Slider, Button
@@ -92,7 +93,10 @@ class plot_growth(object):
     def _make_point_info(self):
         info = ''
         for key, val in self.reader.info['fixedparams'].items():
-            info += f"{self._getlabel(key)} = {val} "
+            if type(val) in ['int', float, float64]:
+                info += f"{self._getlabel(key)} = {val:.4f}\n"
+            else:
+                info += f"{self._getlabel(key)} = {val}\n"
         info = "\n".join(wrap(info, 50))
         return info
         
@@ -117,7 +121,7 @@ class plot_growth(object):
             self.scanlabel = [f'{self._getlabel(key)}={keyval}' for key, keyval in scan.items()] # empty for 1D scans
             self.scanlabel = ', '.join(self.scanlabel)
         else:
-            self.scanlabel = None
+            self.scanlabel = self._getlabel('gam')
             scan = {} # to set paramSpecs to {}
 
         x_vals, y_vals = self.reader.get_1d_list(self.xkey, self.ykeys, paramSpecs = scan) # need to check what happens if paramSpecs = None
@@ -125,7 +129,7 @@ class plot_growth(object):
         if self['EV_visible']['gam']:
             gam_vals = [i.real for i in y_vals]
             self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
-            if 'EV_guess':
+            if self['EV_guess']:
                 _, gam_guess_vals = self.reader.get_1d_list(self.xkey, 'EVguess', paramSpecs = scan)
                 gam_guess_vals = [i.real for i in gam_guess_vals]
                 self.ax.plot(x_vals, gam_guess_vals, self.lstyle, label=f'{self.scanlabel} guess', markersize=self['markersize'])
@@ -138,7 +142,6 @@ class plot_growth(object):
 
         if self.scans:
             for scan in self.scans:
-                print(scan)
                 self.plot_vals(scan = scan)
         else:
             self.plot_vals()

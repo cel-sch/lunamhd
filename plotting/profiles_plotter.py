@@ -6,7 +6,7 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
-from numpy import linspace, sqrt, array, asarray
+from numpy import linspace, sqrt, array, asarray, float64
 
 from matplotlib.pyplot import figure, axes, subplots, show, ion, tight_layout, rcParams
 from matplotlib.widgets import Slider, Button
@@ -113,8 +113,14 @@ class plot_profiles(object):
     def _make_point_info(self, scanval):
         info = ''
         for key, val in self.reader.info['fixedparams'].items():
-            info += f"{self._getlabel(key)} = {val}\n"
-        info += f"{self.scanparam} = {scanval}"
+            if type(val) in ['int', float, float64]:
+                info += f"{self._getlabel(key)} = {val:.4f}\n"
+            else:
+                info += f"{self._getlabel(key)} = {val}\n"
+        if type(scanval) in ['int', float, float64]:
+            info += f"{self.scanparam} = {scanval:.4f}"
+        else:
+            info += f"{self.scanparam} = {scanval}"
         #info = "\n".join(wrap(info, 30))
         return info
 
