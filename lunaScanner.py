@@ -29,7 +29,7 @@ class lunaScan(object):
                         'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'q0':0.938, 'qs':None, 'nu_q':2.}
         
         self.initialisers = {'run_vmec': True, 'run_venus': True, 'toplot': True, 'peakedness': True, 
-                        'ev_guess_type': 'last_ev', 'mode_type':'KH'}
+                        'ev_guess_type': 'last_ev', 'mode_type':'KH', 'vmec_ver':8.5}
         # EV_guess_type: determines what type of eigenvalue guessing system is used. 
         #'last_ev': last EV used as guess for next one, 'polynom_ev': polynomial fit used as guess for next one
 
@@ -402,6 +402,10 @@ class lunaScan(object):
             
             C.Flow.AH = AH # SET FLOW PROFILE
             C.Flow.bcrit = mach # SET FLOW MAGNITUDE
+
+            # To make new VMEC version run
+            AH_AUX_S = 0
+            AH_AUX_F = 0
             
             ### DENSITY
             n0 = self['n0']
@@ -414,15 +418,19 @@ class lunaScan(object):
             T = T/T[0]
             AT = np.polyfit(s2,T,11)[::-1] # SET PT PROFILE
             C.Flow.AT = AT
+
+            # To make new VMEC version run
+            AT_AUX_S = 0
+            AT_AUX_F = 0
             
             ### PRESSURE
             beta0 = self['beta0']
             P = beta0*B0**2*n_*T/(2*mu0*n0)
             
             PVMEC = P*np.exp(-0.5*mach**2*Omega**2./T)
-            AM = np.polyfit(s2,PVMEC,11)[::-1]
-            C.Pressure.AM = AM # SET PRESSURE PROFILE
-            C.Pressure.PRES_SCALE = 1.
+            # AM = np.polyfit(s2,PVMEC,11)[::-1]
+            # C.Pressure.AM = AM # SET PRESSURE PROFILE
+            # C.Pressure.PRES_SCALE = 1.
 
             # C.Pressure.PMASS_TYPE = "'cubic_spline'"
             # C.Pressure.AM_AUX_S = s
@@ -455,11 +463,20 @@ class lunaScan(object):
             print ('Insert a valid value for LRFP')
             exit()
         
-        C.Current.AI = AI
+        #C.Current.AI = AI
         
-        # C.Current.PIOTA_TYPE = "'cubic_spline'"
-        # C.Current.AI_AUX_S = s
-        # C.Current.AI_AUX_F = q 
+        # q-profile spline
+        C.Current.PIOTA_TYPE = "'cubic_spline'"
+        C.Current.AI_AUX_S = s
+        if C.Grid.LRFP == 'F':
+            C.Current.AI_AUX_F = -1./q
+        elif C.Grid.LRFP == 'T':
+            C.Current.AI_AUX_F = -q
+        else:
+            print ('Insert a valid value for LRFP')
+            exit()
+
+        self.dico_vmec = {'ah':AH,'ah_aux_s':AH_AUX_S,'ah_aux_f':AH_AUX_F,'at':AT,'at_aux_s':AT_AUX_S,'at_aux_f':AT_AUX_F}
         
         #Change some control parameters
         #======================================================================
@@ -480,8 +497,12 @@ class lunaScan(object):
             C.WriteInput(Fout)
         
         	#Run VMEC
-            #vmec_ver = 'xvmec2000_flow_netcdf'
-            vmec_ver = 'vmec_flow'
+            if self['vmec_ver'] == 8.5:
+                vmec_ver = 'xvmec2000_flow_netcdf'
+            elif self['vmec_ver'] == 9:
+                vmec_ver = 'vmec_flow'
+            else:
+                print(f'ERROR: invalid VMEC version specified.')
             os.system(DIR_VMEC+f'./{vmec_ver} '+Fout)
             print(f"USING VMEC VERSION {vmec_ver}")
 
@@ -524,7 +545,7 @@ class lunaScan(object):
         """
         
         #Read equilibrium from VMEC output file and transform it into SFL
-        eq = SATIRE2SFL.SATIRE2SFL(self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{idx}.nc')
+        eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{idx}.nc', dico_vmec = self.dico_vmec)
         eq.Writeh5(eqFile=f'eq.{self.runid}_{idx}.h5')
         os.system('mv '+f'eq.{self.runid}_{idx}.h5'+' eqFiles')
         #note: writeh5 is essentially run again inside of saveh5, so functionally it's run twice but these files are discarded
@@ -638,7 +659,7 @@ class lunaScan(object):
             # Run VMEC
             if self['run_vmec']:
                 self._buildVMEC(idx = vidx) # sets runid inside of this function
-                eq = SATIRE2SFL.SATIRE2SFL(self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{vidx}.nc')
+                #eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{vidx}.nc', dico_vmec = self.dico_vmec)
 
             if self['run_venus']:
                 # Set EV guess and calculate the growth rate
@@ -748,8 +769,13 @@ class lunaScan(object):
         fOut = f"{run_saveloc}/{self.runid}.npz"
         
         np.savez(fOut, data = rundata, info = runinfo)
-        inputpath = Path.cwd() / self.inputpath
-        copy2(inputpath, run_saveloc)
+        # add any new info to the final inputfile
+        inputfile = Path.cwd() / self.inputpath
+        inputfile_nml = f90.read(inputfile)
+        inputfile_nml['info']['runid'] = self.runid
+        with open(run_saveloc / self.inputfile, 'w') as f:
+            f90.write(inputfile_nml, f, force=True)
+        #copy2(inputfile, run_saveloc)
         
         return # can save old runs if same input file (needs same scan parameters) and runid is provided using init_run
                     
