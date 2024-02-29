@@ -13,7 +13,7 @@
    nu_q = 8
    nu_n = 6
    drstep = 0.25
-   init_evguess = 0.05
+   init_evguess = 0.1
 /
 &initialisers
    run_vmec = True
@@ -21,14 +21,15 @@
    peakedness = False
    ev_guess_type = 'last_ev'
    mode_type = 'KH'
+   vmec_ver = 8.5
 /
 &info
    runid = ,
-   description = ,
+   description = 'setting C.Current.AI_AUX_F = -1/q since this feels more appropriate for a spline fit, changing initial EV guess from 0.05 to 0.1 to see if the wrong mode is just being selected'
 /
 &scanparam_0
    paramkey = 'mach',
-   nodes = 0.4, 1
+   nodes = 0, 1
    nsteps = 15
    vals = ,
    descending = True
