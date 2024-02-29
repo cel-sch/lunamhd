@@ -14,6 +14,7 @@ import random
 import f90nml as f90
 from pathlib import Path
 from shutil import copy2
+from copy import deepcopy
 
 from VenusMHDpy import SATIRE2SFL
 from VenusMHDpy import Equilibriumh5
@@ -742,14 +743,21 @@ class lunaScan(object):
             
         rundata = {}
         runinfo = {}
+        scans = deepcopy(self.scans)
         if self.scans:
+            print(f'self.scans = {self.scans}')
             for n, scan in enumerate(self.scans):
-                print(scan)
                 scandir = self._build_scan_dir(scan)
-                scanfile = sorted(scandir.glob('*.npz'))[0] # picks out the first .npz file
                 scanid = f'{runid}_{n}'
-                raw_scan = np.load(scanfile, allow_pickle = True)
-                rundata[scanid] = raw_scan['data'].item()
+                try:
+                    scanfile = sorted(scandir.glob('*.npz'))[0] # picks out the first .npz file
+                    raw_scan = np.load(scanfile, allow_pickle = True)
+                    rundata[scanid] = raw_scan['data'].item()
+                except:
+                    print(f'Scan {scan} output file not found. May not have converged.')
+                    scans.remove(scan) # remove the skipped scan from the scanlist for the final output file
+                    continue
+                print(scan)
         else:
             runfile = sorted(run_saveloc.glob('*.npz'))[0]
             raw_scan = np.load(runfile, allow_pickle = True)
