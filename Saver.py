@@ -15,6 +15,5 @@ print(f"Run {runid} saved.")
 
 # Test plot
 read = lunaRead(runid)
-bp = read.basic_plot()
-bp.open_plot()
-bp.save_plot(f'/users/cs2427/scratch/lunamhd-data/KH/{runid}/{runid}_EVs.png')
+gp = read.EV_plot()
+gp.save_plot(f'/users/cs2427/scratch/lunamhd-data/KH/{runid}/{runid}_EVs.png')

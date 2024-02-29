@@ -34,10 +34,10 @@ class lunaScan(object):
         #'last_ev': last EV used as guess for next one, 'polynom_ev': polynomial fit used as guess for next one
 
         ### Default path stuff
-        #self.inputpath_root = Path('/users/cs2427/lunamhd')
-        self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
-        #self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
-        self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
+        self.inputpath_root = Path('/users/cs2427/lunamhd')
+        #self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
+        self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
+        #self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
 
         ### Define path to input file. Default is lunamhd/Input/default.in
         self.inputfile = inputfile
@@ -424,9 +424,9 @@ class lunaScan(object):
             C.Pressure.AM = AM # SET PRESSURE PROFILE
             C.Pressure.PRES_SCALE = 1.
 
-            C.Pressure.PMASS_TYPE = "'cubic_spline'"
-            C.Pressure.AM_AUX_S = s
-            C.Pressure.AM_AUX_F = PVMEC
+            # C.Pressure.PMASS_TYPE = "'cubic_spline'"
+            # C.Pressure.AM_AUX_S = s
+            # C.Pressure.AM_AUX_F = PVMEC
 
         self.Omega = Omega
         #======================================================================
@@ -457,9 +457,9 @@ class lunaScan(object):
         
         C.Current.AI = AI
         
-        C.Current.PIOTA_TYPE = "'cubic_spline'"
-        C.Current.AI_AUX_S = s
-        C.Current.AI_AUX_F = q 
+        # C.Current.PIOTA_TYPE = "'cubic_spline'"
+        # C.Current.AI_AUX_S = s
+        # C.Current.AI_AUX_F = q 
         
         #Change some control parameters
         #======================================================================
@@ -480,8 +480,8 @@ class lunaScan(object):
             C.WriteInput(Fout)
         
         	#Run VMEC
-            vmec_ver = 'xvmec2000_flow_netcdf'
-            #vmec_ver = 'vmec_flow'
+            #vmec_ver = 'xvmec2000_flow_netcdf'
+            vmec_ver = 'vmec_flow'
             os.system(DIR_VMEC+f'./{vmec_ver} '+Fout)
             print(f"USING VMEC VERSION {vmec_ver}")
 
