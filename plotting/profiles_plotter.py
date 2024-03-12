@@ -86,6 +86,10 @@ class plot_profiles(object):
         self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
         self.fig.set_tight_layout(True)
 
+        self.fig2, self.ax2 = subplots(figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
+        self.fig2.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
+        self.fig2.set_tight_layout(True)
+
         self.scans = self.reader.info['scans']
 
         # Make slider
@@ -194,6 +198,14 @@ class plot_profiles(object):
         self.ax[1,3].text(0,0,self._make_point_info(scanval = self.spar_list[val]))
         if not self['visible']['infoplot']:
             self.ax[1,3].set_axis_off()
+
+        shaf_diff0 = self.reader.get_1d_list(scanparam = self.xkey, variable = 'shaf_diff0', spar_list = self.spar_list[val], paramSpecs = scan, _returnBoth = False)
+        shaf_diff0 = shaf_diff0[0]
+
+        self.ax2.cla()
+        self.ax2.plot(s, shaf_diff0)
+        self.ax2.set_ylabel(r'$\frac{|J^\phi\mathcal{J}-\Delta^*\psi_p(\mathcal{J}/R^2)|}{max[\Delta^*\psi_p(\mathcal{J}/R^2)]}$')
+        self.ax2.set_xlabel('s')
             
     def draw_fig(self, slider_idx=None):
         if self.scans:
@@ -203,3 +215,4 @@ class plot_profiles(object):
             self.plot_vals()
         
         self.fig.canvas.draw_idle()
+        self.fig2.canvas.draw_idle()

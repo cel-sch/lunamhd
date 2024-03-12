@@ -1,36 +1,37 @@
 &fixed_params
    profile = 'rot'
-   beta0 = 0.018
-   rmaj = 10
+   beta0 = 0.054
+   rmaj = 3.333333
    a = 1
    n = -1
    rationalm = 1
    sidebands = 5
    b0 = 1
-   rs = 0
+   rs = 0.3
    qs = 2
-   q0 = 1.01
-   nu_q = 8
-   nu_n = 6
+   q0 = 0.868
+   nu_q = 2
+   nu_n = 2
    drstep = 0.25
-   init_evguess = 0.1
+   init_evguess = 0.01
 /
 &initialisers
    run_vmec = True
    run_venus = True
    peakedness = False
-   ev_guess_type = 'last_ev'
-   mode_type = 'KH'
+   ev_guess_type = 'polynom_ev'
+   mode_type = 'IK'
    vmec_ver = 8.5
 /
 &info
    runid = ,
-   description = 'setting C.Current.AI_AUX_F = -1/q since this feels more appropriate for a spline fit, changing initial EV guess from 0.05 to 0.1 to see if the wrong mode is just being selected'
+   description = 'no spline old VMEC (8.5) test for IK type parameter profiles'
+   datetime = ,
 /
 &scanparam_0
    paramkey = 'mach',
    nodes = 0, 1
-   nsteps = 15
+   nsteps = 2
    vals = ,
    descending = True
 /

@@ -27,7 +27,7 @@ default_settings = {'suptitle': None,
                     'visible':{'suptitle':True, 'legend':True, 'grid':True}}
 
 class plot_growth(object):
-    def __init__(self, reader, settings = {}):
+    def __init__(self, reader, scan_specs = {}, settings = {}):
         self.reader = reader
         self.settings = {}
         defaults = deepcopy(default_settings)
@@ -73,7 +73,10 @@ class plot_growth(object):
         self.fig, self.ax = subplots(figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
         self.fig.set_tight_layout(True)
              
-        self.scans = self.reader.info['scans']
+        if self.scan_specs:
+            self.scans = self._make_scan_list()
+        else:     
+            self.scans = deepcopy(self.reader.info['scans'])
         if self['suptitle'] is None:
             suptitle = self._make_point_info()
             self.fig.suptitle(suptitle,fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
@@ -89,6 +92,53 @@ class plot_growth(object):
         ion()
         show()
         self.draw_fig()
+
+    def _make_scan_loop(self):
+        # scan_specs format e.g.: {'Omega':[1,2,3], 'beta':0.5}
+        # Makes the list of e.g. [{'beta':1,'delq':0.1},{'beta':1,'delq':0.2}]
+        scandim = len(self.reader.info['scanorder'])
+        
+        def loop(n = scandim - 1, scandim = scandim, scanvars = {}, scans = []):
+            if n == 0:
+                return [{}]
+            else:
+                scanparam = self.reader.info['scanorder'][scandim - n]
+                # Loop over specified scanparam values if they are specified
+                if scanparam in self.scan_specs.keys():
+                    for val in self.scan_specs[scanparam]:    
+                        scanvars[scanparam] = val
+                        if n > 1:
+                            loop(n = n - 1, scandim = scandim, scanvars = scanvars)
+                        else:
+                            scans.append(scanvars.copy())
+                # If scanparam values not specified, load the reader scanparam values
+                else:
+                    for val in self.reader.info['scanparams'][scanparam]:    
+                        scanvars[scanparam] = val
+                        if n > 1:
+                            loop(n = n - 1, scandim = scandim, scanvars = scanvars)
+                        else:
+                            scans.append(scanvars.copy())
+            return scans
+        return loop()
+    
+    def _make_scan_list(self):
+        if type(self.scan_specs) is list:
+            scans = self.scan_specs
+            self._clean_scan_list(scans)
+        elif type(self.scan_specs) is dict:
+            scans = self._make_scan_loop()
+            self._clean_scan_list(scans)
+        else:
+            print("ERROR: invalid scan_specs format provided, please input as list or dictionary.")
+        return scans
+
+    def _clean_scan_list(self, scans):
+        # Remove any scans which did not converge
+        for scan in scans:
+            if scan not in self.reader.info['scans']:
+                scans.remove(scan)
+        return scans
 
     def _make_point_info(self):
         info = ''

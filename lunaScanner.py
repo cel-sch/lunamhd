@@ -48,11 +48,6 @@ class lunaScan(object):
             self.inputpath = Path(self.inputpath_root / f'Input/{self.inputfile}')
         else:
             self.inputpath = Path(self.inputpath + '/' + self.inputfile)
-        ### Define outpath
-        if self['mode_type'] == 'KH':
-            self.outpath = Path(self.outputpath_root / 'KH')
-        elif self['mode_type'] == 'IK':
-            self.outpath = Path(self.outputpath_root / 'IK')
         
         ### Essentially the contents of init_scan
         self.scans = {}
@@ -60,6 +55,12 @@ class lunaScan(object):
         if runid is None:
             runid = self._build_run_name(self.scanorder)
         self.runid = runid
+
+        ### Define outpath
+        if self['mode_type'] == 'KH':
+            self.outpath = Path(self.outputpath_root / 'KH')
+        elif self['mode_type'] == 'IK':
+            self.outpath = Path(self.outputpath_root / 'IK')
 
     def __getitem__(self, key):
         if key in self.params:
@@ -305,145 +306,88 @@ class lunaScan(object):
         # Omega --> Omega/Omega0
         ### Pressure: care with P vs PVMEC
 
-        rstep = self['rstep']
-        drstep = self['drstep']
+        mach = self['mach']
+        beta0 = self['beta0']
+        n0 = self['n0']
+        nu_n = self['nu_n']
 
-        if self['profile'] != 'rot':
-            ### rot
-            mach = self['mach']
-            Omega = np.ones_like(s)
-            Omega = (1.-s**6)
-            Omega = Omega/Omega[0]
-            AH = np.polyfit(s2,Omega,11)[::-1]
-            # Set flow parameters to zero
-            #AH = np.zeros_like(s2) # doesn't work, VMEC won't run
-            
-            C.Flow.AH = AH # SET FLOW PROFILE
-            C.Flow.bcrit = mach # SET FLOW MAGNITUDE
-            
-            if self['profile'] in ['rho_t', 'rho_p']:
-                ### DENSITY
-                n0 = self['n0']
-                n_ = .5*n0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-                
-                if self['profile'] == 'rho_t':
-                    ### PT
-                    n_ = .5*n0*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
-                    
-                    #T = 1/n_
-                    #T = T/T[0]
-                    T = .5*(1 - np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
-                    T = T/T[0]
-                    AT = np.polyfit(s2,T,11)[::-1] # SET PT PROFILE
-                    #AT = np.zeros_like(s2) # doesn't work, VMEC won't run
-                    C.Flow.AT = AT
-                    
-                    ### PRESSURE
-                    beta0 = self['beta0']
-                    P = beta0*B0**2/(2*mu0*n0*T[0]) # should be constant
-                    #P = beta0*B0**2/(2*mu0*n0*T[0])*(1-s2**3)
-                    
-                    PVMEC = P*np.exp(-0.5*mach**2*Omega**2./T)
-                    AM = np.polyfit(s2,PVMEC,11)[::-1]
-                    C.Pressure.AM = AM # SET PRESSURE PROFILE
-                    C.Pressure.PRES_SCALE = 1.
-                    
-                elif self['profile'] == 'rho_p':
-                    ### PT
-                    T = np.ones_like(s)
-                    T = T/T[0]
-                    AT = np.polyfit(s2,T,11)[::-1] # SET PT PROFILE
-                    C.Flow.AT = AT
-                    
-                    ### PRESSURE
-                    beta0 = self['beta0']
-                    P = beta0*B0**2*n_*T/(2*mu0*n0) # stepped like n_
-                    
-                    PVMEC = P*np.exp(-0.5*mach**2*Omega**2./T)
-                    AM = np.polyfit(s2,PVMEC,11)[::-1]
-                    C.Pressure.AM = AM # SET PRESSURE PROFILE
-                    C.Pressure.PRES_SCALE = 1.
-                    
-                    # C.Pressure.PMASS_TYPE = "'cubic_spline'"
-                    # C.Pressure.AM_AUX_S = s
-                    # C.Pressure.AM_AUX_F = PVMEC
-                    
-            elif self['profile'] == 'PT':
-                ### DENSITY
-                n0 = self['n0']
-                n_ = n0*np.ones_like(s)
-                
-                ### PT
-                T = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
-                T = T/T[0]
-                AT = np.polyfit(s2,T,11)[::-1] # SET PT PROFILE
-                C.Flow.AT = AT
-                
-                ### PRESSURE
-                beta0 = self['beta0']
-                P0 = beta0*B0**2*n_*T/(2*mu0*n0)
-                P = .5*P0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-                
-                PVMEC = P*np.exp(-0.5*mach**2*Omega**2./T)
-                AM = np.polyfit(s2,PVMEC,11)[::-1]
-                C.Pressure.AM = AM # SET PRESSURE PROFILE
-                C.Pressure.PRES_SCALE = 1.
-                
-                # C.Pressure.PMASS_TYPE = "'cubic_spline'"
-                # C.Pressure.AM_AUX_S = s
-                # C.Pressure.AM_AUX_F = PVMEC
-            
-        elif self['profile'] == 'rot':
-            ### ROTATION
-            mach = self['mach']
-            Omega = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-            Omega = Omega/Omega[0]
-            AH = np.polyfit(s2,Omega,11)[::-1]
-            
-            C.Flow.AH = AH # SET FLOW PROFILE
-            C.Flow.bcrit = mach # SET FLOW MAGNITUDE
+        if self['mode_type'] == 'KH':
+            rstep = self['rstep']
+            drstep = self['drstep']
 
-            # To make new VMEC version run
-            AH_AUX_S = 0
-            AH_AUX_F = 0
-            
-            ### DENSITY
-            n0 = self['n0']
-            nu_n = self['nu_n']
-            n_ = n0*(1.-s**nu_n)
-            
-            ### PT
-            #T = np.ones_like(s)
-            T = n0*(1.-s**6) + 0.01
-            T = T/T[0]
-            AT = np.polyfit(s2,T,11)[::-1] # SET PT PROFILE
-            C.Flow.AT = AT
+            if self['profile'] != 'rot':
+                Omega = (1.-s**6)
+                
+                if self['profile'] in ['rho_t', 'rho_p']:
+                    n_ = .5*n0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
+                    
+                    if self['profile'] == 'rho_t':
+                        n_ = n_ + 0.05
+                        T = .5*(1 - np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
+                        P = beta0*B0**2/(2*mu0*n0*T[0]) # should be constant
+                        #P = beta0*B0**2/(2*mu0*n0*T[0])*(1-s2**3)
+                        
+                    elif self['profile'] == 'rho_p':
+                        T = np.ones_like(s)
+                        P = beta0*B0**2*n_*T/(2*mu0*n0) # stepped like n_ 
 
-            # To make new VMEC version run
-            AT_AUX_S = 0
-            AT_AUX_F = 0
-            
-            ### PRESSURE
-            beta0 = self['beta0']
-            P = beta0*B0**2*n_*T/(2*mu0*n0)
-            
-            PVMEC = P*np.exp(-0.5*mach**2*Omega**2./T)
-            # AM = np.polyfit(s2,PVMEC,11)[::-1]
-            # C.Pressure.AM = AM # SET PRESSURE PROFILE
-            # C.Pressure.PRES_SCALE = 1.
-
-            C.Pressure.PMASS_TYPE = "'cubic_spline'"
-            C.Pressure.AM_AUX_S = s
-            C.Pressure.AM_AUX_F = PVMEC
-
-        self.Omega = Omega
-        #======================================================================
+                elif self['profile'] == 'PT':
+                    n_ = n0*np.ones_like(s)
+                    T = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
+                    P0 = beta0*B0**2*n_*T/(2*mu0*n0)
+                    P = .5*P0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
+                
+            elif self['profile'] == 'rot':
+                Omega = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2))
+                n_ = n0*(1.-s**nu_n)
+                T = n0*(1.-s**6) + 0.01
+                P = beta0*B0**2*n_*T/(2*mu0*n0)  
         
+        elif self['mode_type'] == 'IK':
+            n_ = n0*1.-s**nu_n
+            # n_ = np.ones_like(s)
+            T = np.ones_like(s) # makes density equal to the pressure
+            # T = 1-s2+0.05
+            P = beta0*B0**2.*(1-s2)/(2.*mu0)
+            Omega = np.ones_like(s)
+
+        ### PRESSURE
+        PVMEC = P*np.exp(-0.5*mach**2*Omega**2./T)
+
+        # C.Pressure.PMASS_TYPE = "'cubic_spline'"
+        # C.Pressure.AM_AUX_S = s
+        # C.Pressure.AM_AUX_F = PVMEC
+
+        AM = np.polyfit(s2,PVMEC,11)[::-1]
+        C.Pressure.AM = AM 
+        C.Pressure.PRES_SCALE = 1.
+        
+        ### ROTATION
+        Omega = Omega/Omega[0]
+        self.Omega = Omega
+
+        AH_AUX_S = 0
+        AH_AUX_F = 0
+
+        AH = np.polyfit(s2,Omega,11)[::-1]
+        C.Flow.AH = AH # SET FLOW PROFILE
+        C.Flow.bcrit = mach # SET FLOW MAGNITUDE
+        
+        ### TEMPERATURE
+        T = T/T[0]
+
+        AT_AUX_S = 0
+        AT_AUX_F = 0
+
+        AT = np.polyfit(s2,T,11)[::-1] 
+        C.Flow.AT = AT
+
+        ### Q PROFILE
+        #======================================================================
         C.Current.NCURR  = 0     #0 for rotal transform, 1 for toroidal current density
-        # q-profile
         #======================================================================
         qr = self['qr']
-        rs = self['rs'] # set to 0 to get qs = 1, this is r where q = qr
+        rs = self['rs'] # set to 0 to get qs = 1, this is r where q = qr, equivalent to r1 in Tom's IK work
         q0 = self['q0']
         nu_q = self['nu_q']
         
@@ -453,6 +397,7 @@ class lunaScan(object):
             qs = (qr-q0)/rs**(nu_q)
             
         q = q0+qs*s**nu_q
+        q = 1 - (1-q0)*(1 - (s/rs)**nu_q)
         self.q = q
         
         if C.Grid.LRFP == 'F':
@@ -463,18 +408,18 @@ class lunaScan(object):
             print ('Insert a valid value for LRFP')
             exit()
         
-        #C.Current.AI = AI
+        C.Current.AI = AI
         
         # q-profile spline
-        C.Current.PIOTA_TYPE = "'cubic_spline'"
-        C.Current.AI_AUX_S = s
-        if C.Grid.LRFP == 'F':
-            C.Current.AI_AUX_F = -1./q
-        elif C.Grid.LRFP == 'T':
-            C.Current.AI_AUX_F = -q
-        else:
-            print ('Insert a valid value for LRFP')
-            exit()
+        # C.Current.PIOTA_TYPE = "'cubic_spline'"
+        # C.Current.AI_AUX_S = s
+        # if C.Grid.LRFP == 'F':
+        #     C.Current.AI_AUX_F = -1./q
+        # elif C.Grid.LRFP == 'T':
+        #     C.Current.AI_AUX_F = -q
+        # else:
+        #     print ('Insert a valid value for LRFP')
+        #     exit()
 
         self.dico_vmec = {'ah':AH,'ah_aux_s':AH_AUX_S,'ah_aux_f':AH_AUX_F,'at':AT,'at_aux_s':AT_AUX_S,'at_aux_f':AT_AUX_F}
         
@@ -548,7 +493,6 @@ class lunaScan(object):
         eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{idx}.nc', dico_vmec = self.dico_vmec)
         eq.Writeh5(eqFile=f'eq.{self.runid}_{idx}.h5')
         os.system('mv '+f'eq.{self.runid}_{idx}.h5'+' eqFiles')
-        #note: writeh5 is essentially run again inside of saveh5, so functionally it's run twice but these files are discarded
     	
     	#Create the stability object
         stab = Stability.Stability('IdealMHDFlow-Euler')
@@ -578,6 +522,11 @@ class lunaScan(object):
         eq.ChangeGrid(stab.grid.S)
         eq.Normalise()
         eq.BuildInGrid(stab.grid)
+
+        # Calculate Shafranov stuff
+        LHS = eq.dFds*eq.g22/(eq.q*eq.R2)+eq.F*eq.dg22ds/(eq.q*eq.R2)-eq.F*eq.g22*eq.dqds/(eq.q**2*eq.R2)-eq.F*eq.g22*eq.dR2ds/(eq.q*eq.R2**2.)-eq.F/eq.q*(eq.dg12du/eq.R2-eq.g12*eq.dR2du/eq.R2**2.)
+        RHS = -eq.q*eq.dFds-(eq.q*eq.R2/eq.F)*(eq.dPds+(eq.R**2.-1.)*eq.P*eq.dUds)*np.exp(eq.U*(eq.R**2.-1.))
+        shaf_diff0 = (RHS[0]-LHS[0])/max(abs(LHS[0]))
     	
         V0_Va = np.sqrt(eq.M02*eq.mu0*eq.P0)/eq.B0
         # Calculate Omegahat, rotation frequency as normalized in 2013 PPCF
@@ -642,7 +591,7 @@ class lunaScan(object):
             print ('Most unstable eigenvalue')
             print ('(Gamma/OmegaA) = %.5E + i(%.5E)'%(EV.real,EV.imag))
 
-        output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.h5', 'params':self.params.copy(), 'profile':self['profile']}
+        output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.h5', 'params':self.params.copy(), 'profile':self['profile'], 'shaf_diff0':shaf_diff0}
         
         return output.copy()
 
@@ -743,13 +692,19 @@ class lunaScan(object):
         rundata = {}
         runinfo = {}
         if self.scans:
+            print(f'self.scans = {self.scans}')
             for n, scan in enumerate(self.scans):
-                print(scan)
                 scandir = self._build_scan_dir(scan)
-                scanfile = sorted(scandir.glob('*.npz'))[0] # picks out the first .npz file
                 scanid = f'{runid}_{n}'
-                raw_scan = np.load(scanfile, allow_pickle = True)
-                rundata[scanid] = raw_scan['data'].item()
+                try:
+                    scanfile = sorted(scandir.glob('*.npz'))[0] # picks out the first .npz file
+                    raw_scan = np.load(scanfile, allow_pickle = True)
+                    rundata[scanid] = raw_scan['data'].item()
+                except:
+                    print(f'Scan {scan} output file not found. May not have converged.')
+                    scans.remove(scan) # remove the skipped scan from the scanlist for the final output file
+                    continue
+                print(scan)
         else:
             runfile = sorted(run_saveloc.glob('*.npz'))[0]
             raw_scan = np.load(runfile, allow_pickle = True)
@@ -773,11 +728,17 @@ class lunaScan(object):
         inputfile = Path.cwd() / self.inputpath
         inputfile_nml = f90.read(inputfile)
         inputfile_nml['info']['runid'] = self.runid
+        inputfile_nml['info']['datetime'] = datetime.now().strftime("%d-%m-%y_%H:%M")
         with open(run_saveloc / self.inputfile, 'w') as f:
             f90.write(inputfile_nml, f, force=True)
         #copy2(inputfile, run_saveloc)
         
         return # can save old runs if same input file (needs same scan parameters) and runid is provided using init_run
+
+    def localrun(self):
+        self.init_run()
+        self.run(self.outpath / self.runid)
+        self.save_run()
                     
 
         
