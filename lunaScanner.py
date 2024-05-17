@@ -14,6 +14,7 @@ import random
 import f90nml as f90
 from pathlib import Path
 from shutil import copy2
+from copy import deepcopy
 
 from VenusMHDpy import SATIRE2SFL
 from VenusMHDpy import Equilibriumh5
@@ -35,10 +36,10 @@ class lunaScan(object):
         #'last_ev': last EV used as guess for next one, 'polynom_ev': polynomial fit used as guess for next one
 
         ### Default path stuff
-        #self.inputpath_root = Path('/users/cs2427/lunamhd')
-        self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
-        #self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
-        self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
+        self.inputpath_root = Path('/users/cs2427/lunamhd')
+        #self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
+        self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
+        #self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
 
         ### Define path to input file. Default is lunamhd/Input/default.in
         self.inputfile = inputfile
@@ -721,6 +722,7 @@ class lunaScan(object):
             
         rundata = {}
         runinfo = {}
+        scans = deepcopy(self.scans)
         if self.scans:
             print(f'self.scans = {self.scans}')
             for n, scan in enumerate(self.scans):
