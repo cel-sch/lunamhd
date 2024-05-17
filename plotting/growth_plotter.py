@@ -46,6 +46,7 @@ class plot_growth(object):
                 
         self.xkey = None
         self.ykeys = None
+        self.scan_specs = scan_specs
 
         self.open_plot()
                 

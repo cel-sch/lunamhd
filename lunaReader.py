@@ -58,6 +58,10 @@ class lunaRead(object):
             var = [var]
         return var
 
+    def _find_nearest(self, arr, val):
+        nearest_val = min(arr, key=lambda i: abs(i - val))
+        return nearest_val
+
     def get_point_label(self, paramSpecs):
         # NOTE: this relies on ordered dictionaries and will not work for python versions older than 3.6
         # Currently only returns the first point matching the paramSpecs given.
@@ -69,7 +73,8 @@ class lunaRead(object):
             for pointkey, point in scan.items():
                 isrun = True
                 for var, val in paramSpecs.items():
-                    if point['params'][var] != val:
+                    #if point['params'][var] != val:
+                    if abs(point['params'][var] - val) > 1E-10:
                         isrun = False
                     #else: isrun = True breaks things to always pick the same point, unsure why
                 if isrun:

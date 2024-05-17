@@ -21,16 +21,15 @@ from VenusMHDpy import Stability
 from VenusMHDpy import VMECInput
 from VenusMHDpy.library import find_nearest
 
-class lunaScan(object):
+class lunaScanTest(object):
     def __init__(self, runid = None, inputfile = None, inputpath = None):
         profiles = ['rho_t', 'rho_p', 'pt', 'rot']
         self.params = {'profile':'rho_t', 'mach':0.0, 'omegahat':0.0, 'beta0':0.05, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5, 'init_evguess':1E-1,
                         'd':0., 'el':0., 'tr':0., 'mpol':15, 'ntor':0, 'rstep':0.5, 'drstep':0.15, 
-                        'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'q0':0.938, 'qs':None, 'nu_q':2.,
-                            'grid_res':100}
+                        'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'q0':0.938, 'qs':None, 'nu_q':2.}
         
         self.initialisers = {'run_vmec': True, 'run_venus': True, 'toplot': True, 'peakedness': True, 
-                        'ev_guess_type': 'last_ev', 'mode_type':'KH', 'vmec_ver':8.5, 'splines':['q','p']}
+                        'ev_guess_type': 'last_ev', 'mode_type':'KH', 'vmec_ver':8.5}
         # EV_guess_type: determines what type of eigenvalue guessing system is used. 
         #'last_ev': last EV used as guess for next one, 'polynom_ev': polynomial fit used as guess for next one
 
@@ -131,9 +130,6 @@ class lunaScan(object):
                 self.initialisers[key] = inits[key]
             else:
                 print(f"ERROR: {key} is invalid initialiser, please review.")
-        
-        if self.initialisers['splines'] is None:
-            self.initialisers['splines'] = []
 
     def _make_scan_list(self):
         # Makes the list of e.g. [{'beta':1,'delq':0.1},{'beta':1,'delq':0.2}]
@@ -256,8 +252,8 @@ class lunaScan(object):
         
         #Modify some grid and control parameters, these get written to VMEC input
         #======================================================================
-        C.Grid.MPOL = self.params['mpol']    #Number of poloidal modes used
-        C.Grid.NTOR = self.params['ntor']    #Set 2D	
+        C.Grid.MPOL = 15    #Number of poloidal modes used
+        C.Grid.NTOR = 0   #Set 2D	
         C.Grid.LASYM = 'F'	#Weather or not to violate stellarator symmetry.
         C.Grid.NZETA = 16   #Number ot toroidal planes. Important in free boundary calculations
         C.Grid.LRFP = 'F'   #Weather to use toroidal (F) or poloidal (T) normalized flux as radial variable. Note that if poloidal flux is used, 'q' needs to be provided instead of 'iota'.
@@ -266,14 +262,15 @@ class lunaScan(object):
         
         #Boundary
         #======================================================================
+        epsilon_a = 0.3
         mu0 = 4.*np.pi*1.0E-07
-        e = 1.60217663E-19
-        r0 = self['a']
-        R0 = self['rmaj']
-        B0  = self['b0']
-        D = self['d']  #Shafranov Shift
-        El = self['el'] #Elongation
-        Tr = self['tr'] #Triangularity limit 0.08
+        r0 = 1.0
+        R0 = r0/epsilon_a
+        #R0 = 3.0
+        B0  = 1.0
+        D = 0.00 #Shafranov Shift
+        El = 0.00 #Elongation
+        Tr = 0.00
         
         n = [0,0,0] #n and m are linked to the mode nb for R and Z at the boundaries 
         m = [0,1,2]
@@ -311,129 +308,51 @@ class lunaScan(object):
         ### Pressure: care with P vs PVMEC
 
         mach = self['mach']
-        beta0 = self['beta0']
-        n0 = self['n0']
-        nu_n = self['nu_n']
-
-        if self['mode_type'] == 'KH':
-            rstep = self['rstep']
-            drstep = self['drstep']
-
-            if self['profile'] != 'rot':
-                Omega = (1.-s**6)
-                
-                if self['profile'] in ['rho_t', 'rho_p']:
-                    n_ = .5*n0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-                    
-                    if self['profile'] == 'rho_t':
-                        n_ = n_ + 0.05
-                        T = .5*(1 - np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
-                        P = beta0*B0**2/(2*mu0*n0*T[0]) # should be constant
-                        #P = beta0*B0**2/(2*mu0*n0*T[0])*(1-s2**3)
-                        
-                    elif self['profile'] == 'rho_p':
-                        T = np.ones_like(s)
-                        P = beta0*B0**2*n_*T/(2*mu0*n0) # stepped like n_ 
-
-                elif self['profile'] == 'PT':
-                    n_ = n0*np.ones_like(s)
-                    T = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
-                    P0 = beta0*B0**2*n_*T/(2*mu0*n0)
-                    P = .5*P0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-                
-            elif self['profile'] == 'rot':
-                Omega = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-                n_ = n0*(1.-s**nu_n)
-                T = n0*(1.-s**6) + 0.01
-                P = beta0*B0**2*n_*T/(2*mu0*n0)  
+        beta0 = 0.054
         
-        elif self['mode_type'] == 'IK':
-            n_ = n0*1.-s**nu_n
-            # n_ = np.ones_like(s)
-            T = np.ones_like(s) # makes density equal to the pressure
-            # T = 1-s2+0.05
-            P = beta0*B0**2.*(1-s2)/(2.*mu0)
-            Omega = np.ones_like(s)
-        
-        ### ROTATION
-        Omega = Omega/Omega[0]
-        self.Omega = Omega
+        if self['mode_type'] == 'IK':
+            # Density
+            epsilon_rho = 0.3
+            n_ = 1.-(epsilon_a/epsilon_rho)**2.*s2
+            #n_ = np.ones_like(s)
 
-        if 'o' in self['splines']:
-            print('=== SPLINING FLOW ===')
-            C.Flow.PH_TYPE = "'cubic_spline'"
-            AH_AUX_S = s2
-            AH_AUX_F = Omega
-            AH = [0]
-        else:
-            AH_AUX_S = [0]
-            AH_AUX_F = [0]
-            AH = np.polyfit(s2,Omega,11)[::-1]
-
-        C.Flow.AH_AUX_S = AH_AUX_S
-        C.Flow.AH_AUX_F = AH_AUX_F
-        C.Flow.AH = AH # SET FLOW PROFILE
-        C.Flow.bcrit = mach # SET FLOW MAGNITUDE
-        
-        ### PRESSURE (order matters to get normalized Omega)
-        PVMEC = P*np.exp(-0.5*mach**2*Omega**2./T)
-
-        if 'p' in self['splines']:
-            print('=== SPLINING PRESSURE ===')
-            C.Pressure.PMASS_TYPE = "'cubic_spline'"
-            C.Pressure.AM_AUX_S = s2
-            C.Pressure.AM_AUX_F = PVMEC
-        else:
-            AM = np.polyfit(s2,PVMEC,11)[::-1]
-            C.Pressure.AM = AM 
-            C.Pressure.PRES_SCALE = 1.
-        
-        # ### TEMPERATURE
-        T = T/T[0]
-
-        if 't' in self['splines']:
-            print('=== SPLINING TEMPERATURE ===')
-            C.Flow.PT_TYPE = "'cubic_spline'"
-            AT_AUX_S = s2
-            AT_AUX_F = T
-            AT = [0]
-        else:
-            AT_AUX_S = [0]
-            AT_AUX_F = [0]
+            # Temperature
+            T = np.ones_like(s)
+            #T = 1-s2+0.05 
             AT = np.polyfit(s2,T,11)[::-1]
-
-        C.Flow.AT_AUX_S = AT_AUX_S
-        C.Flow.AT_AUX_F = AT_AUX_F
-        C.Flow.AT = AT
-
-        ### Q PROFILE
-        #======================================================================
-        C.Current.NCURR  = 0     #0 for rotal transform, 1 for toroidal current density
-        #======================================================================
-        qr = self['qr']
-        rs = self['rs'] # set to 0 to get qs = 1, this is r where q = qr, equivalent to r1 in Tom's IK work
-        q0 = self['q0']
-        nu_q = self['nu_q']
-        
-        if rs == 0:
-            qs = self['qs']
-            q = q0+qs*s**nu_q
-        else:
-            qs = (qr-q0)/rs**(nu_q)
-            q = 1 - (1-q0)*(1 - (s/rs)**nu_q)
+            C.Flow.AT = AT
             
-        if 'q' in self['splines']:
-            print('=== SPLINING Q-PROFILE ===')
-            C.Current.PIOTA_TYPE = "'cubic_spline'"
-            C.Current.AI_AUX_S = s2
-            if C.Grid.LRFP == 'F':
-                C.Current.AI_AUX_F = -1./q
-            elif C.Grid.LRFP == 'T':
-                C.Current.AI_AUX_F = -q
-            else:
-                print ('Insert a valid value for LRFP')
-                exit()
-        else:
+            # AT_AUX_S = 0
+            # AT_AUX_F = 0
+
+            # Rotation
+            epsilon_omega = 0.3
+            #Omega = 1.-(epsilon_a/epsilon_omega)**2.*s2
+            Omega = np.ones_like(s)
+            AH = np.polyfit(s2, Omega, 11)[::-1]
+            C.Flow.AH = AH
+            C.Flow.bcrit = mach
+
+            # AH_AUX_S = 0
+            # AH_AUX_F = 0
+
+            # Pressure
+            P = beta0*B0**2.*(1.-(epsilon_a/epsilon_rho)**2*s2)/(2.*mu0)
+            PVMEC = P*np.exp(-.5*mach**2*Omega**2/T)
+            AM = np.polyfit(s2, PVMEC, 11)[::-1]
+            C.Pressure.AM = AM
+            C.Pressure.PRES_SCAL = 1
+
+            # q-profile
+            C.Current.NCURR  = 0
+            r1 = 0.3
+            self.r1 = 0.3
+            q0 = 0.868
+            Deltaq = 1.-q0
+            L = 2.
+            q = 1.-Deltaq*(1.-(s/r1)**L)
+            self.q = q
+
             if C.Grid.LRFP == 'F':
                 AI = np.polyfit(s2,-1./q,11)[::-1]
             elif C.Grid.LRFP == 'T':
@@ -441,9 +360,10 @@ class lunaScan(object):
             else:
                 print ('Insert a valid value for LRFP')
                 exit()
-            C.Current.AI = AI
-
-        self.dico_vmec = {'ah':AH,'ah_aux_s':AH_AUX_S,'ah_aux_f':AH_AUX_F,'at':AT,'at_aux_s':AT_AUX_S,'at_aux_f':AT_AUX_F}
+        
+        C.Current.AI = AI
+        
+        #self.dico_vmec = {'ah':AH,'ah_aux_s':AH_AUX_S,'ah_aux_f':AH_AUX_F,'at':AT,'at_aux_s':AT_AUX_S,'at_aux_f':AT_AUX_F}
         
         #Change some control parameters
         #======================================================================
@@ -512,28 +432,24 @@ class lunaScan(object):
         """
         
         #Read equilibrium from VMEC output file and transform it into SFL
-        eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{idx}.nc', dico_vmec = self.dico_vmec)
-        #eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{idx}.nc')
-        eq.Writeh5(eqFile=f'eq.{self.runid}_{idx}.h5')
+        #eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{idx}.nc', dico_vmec = self.dico_vmec)
+        eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{idx}.nc')
+        eq.kappa = 0.
+        eq.Writeh5(eqFile=f'eq.{self.runid}_{idx}.h5') # DIFF
         os.system('mv '+f'eq.{self.runid}_{idx}.h5'+' eqFiles')
     	
     	#Create the stability object
         stab = Stability.Stability('IdealMHDFlow-Euler')
-        eq.kappa = 0.
         
     	#Modify the default grid
     	#----------------------------------------------------------------------
-        n = self['n'] # toroidal mode number, <0 because of how vars are expanded in n, m
         n = -1
-        RationalM = self['rationalm']
         RationalM = 1
-        Sidebands = self['sidebands']
         Sidebands = 5
         stab.grid.Mmin = RationalM-Sidebands
         stab.grid.Mmax = RationalM+Sidebands
         stab.grid.Ntheta = eq.R.shape[0]
     
-        stab.grid.N = 100
         stab.grid.N = eq.R.shape[1] - 2
         stab.grid.bunching = False
         stab.grid.bunchingQValues = [1.0,1.1, 1.2]
@@ -550,8 +466,7 @@ class lunaScan(object):
         eq.Normalise()
         eq.BuildInGrid(stab.grid)
 
-        if self['mode_type'] == 'IK':
-            eq.Omega = -eq.Omega # KH doesn't run well if this is not set
+        eq.Omega = -eq.Omega # BIG DIFF?
 
         # Calculate Shafranov stuff
         LHS = eq.dFds*eq.g22/(eq.q*eq.R2)+eq.F*eq.dg22ds/(eq.q*eq.R2)-eq.F*eq.g22*eq.dqds/(eq.q**2*eq.R2)-eq.F*eq.g22*eq.dR2ds/(eq.q*eq.R2**2.)-eq.F/eq.q*(eq.dg12du/eq.R2-eq.g12*eq.dR2du/eq.R2**2.)
@@ -584,10 +499,10 @@ class lunaScan(object):
     		#------------------------------------------------------------------
             t0 = time.time()
             if EVguess == None:
-                idx_rstep = find_nearest(stab.grid.S, self['rstep'])
+                idx = find_nearest(stab.grid.S, self.r1)
                 #EV_guess = 1.0E-1 + (1.0j)*abs(n)*eq.Omega[idx_rstep] # want to re-implement this
                 EVguess = self['init_evguess']
-                EVguess = EVguess + (1.0j)*abs(n)*eq.Omega[0]
+                EVguess = EVguess + (1.0j)*abs(n)*eq.Omega[idx]
             #elif EV_guess == 'bad': #EV_guess.real < 1.0E-07 # an attempt at correcting when the EV guesses get bad
                 #idx_rstep = find_nearest(stab.grid.S, self.profParams['rstep'])
                 #EV_guess = 1.0E-3 + (1.0j)*abs(n)*eq.Omega[idx_rstep]
@@ -638,8 +553,6 @@ class lunaScan(object):
             # Run VMEC
             if self['run_vmec']:
                 self._buildVMEC(idx = vidx) # sets runid inside of this function
-                eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{vidx}.nc', dico_vmec = self.dico_vmec)
-                #eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{vidx}.nc')
 
             if self['run_venus']:
                 # Set EV guess and calculate the growth rate
@@ -655,15 +568,18 @@ class lunaScan(object):
                     if vidx <= 2:
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = None, idx = vidx)
                     else:
-                        polycoeff = vidx - 2
-                        if polycoeff > 10: # changing these numbers can help improve fits sometimes
+                        polycoeff = vidx - 1
+                        print(f"EVGUESS: polycoeff = {polycoeff}")
+                        if polycoeff > 10: 
                             polycoeff = 10
                         ws = []
                         for i in range(vidx):
                             ws.append(output1d[f'{scanid}_{i}']['EV'])
                         guessReal = np.polyfit(np.asarray(self.scanparams[scanparam][:vidx]),np.asarray([i.real for i in ws]),polycoeff)
                         guessImag = np.polyfit(np.asarray(self.scanparams[scanparam][:vidx]),np.asarray([i.imag for i in ws]),polycoeff)
+                        print(f"EVGUESS: gams = {[i.real for i in ws[:vidx]]}")
                         
+                        print(f"EVGUESS: mach = {val}")
                         EVguess = np.polyval(guessReal,val)*3 + 1j*np.polyval(guessImag,val)
                         EVguess += 1j*EVguess.imag*1E-3 # want to be slightly larger than the correct EV
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = EVguess, idx = vidx)

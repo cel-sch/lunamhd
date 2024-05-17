@@ -1,39 +1,39 @@
 &fixed_params
    profile = 'rot'
-   beta0 = 0.018
-   rmaj = 10
+   beta0 = 0.25
+   rmaj = 3.333333
    a = 1
    n = -1
    rationalm = 1
    sidebands = 5
    b0 = 1
-   rs = 0
+   rs = 0.3
    qs = 2
-   q0 = 1.01
-   nu_q = 8
-   nu_n = 6
-   drstep = 0.15
-   init_evguess = 0.2
+   q0 = 0.868
+   nu_q = 2
+   nu_n = 2
+   drstep = 0.25
+   init_evguess = 0.1
    grid_res = 100
 /
 &initialisers
    run_vmec = True
    run_venus = True
    peakedness = False
-   ev_guess_type = 'last_ev'
-   mode_type = 'KH'
+   ev_guess_type = 'polynom_ev'
+   mode_type = 'IK'
    vmec_ver = 9
-   splines = 'q', 'p', 'o', 't'
+   splines = 'p', 'q', 't', 'o'
 /
 &info
    runid = ,
-   description = 'all splined test fig 5'
+   description = ''
    datetime = ,
 /
 &scanparam_0
    paramkey = 'mach',
-   nodes = 0, 1
-   nsteps = 20
+   nodes = 0, 0.3
+   nsteps = 10
    vals = ,
-   descending = True
+   descending = False
 /

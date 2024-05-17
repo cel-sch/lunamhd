@@ -149,8 +149,8 @@ class plot_EF(object):
         
     def _load_x_axis(self):
         self.xkey = self.scanparam # required for input to retrieve list of eigenfuncs
-        self.r = linspace(0.,1.,102) # need to read this properly from the h5 file probably
-        self.r = sqrt(self.r)
+        # self.r = linspace(0.,1.,102) # need to read this properly from the h5 file probably
+        # self.r = sqrt(self.r)
         self._x_ax_label = 'r'
         
     def _load_y_axis(self, axis_type):
@@ -170,7 +170,8 @@ class plot_EF(object):
         for i, (var_key, var_allms) in enumerate(EF.items()):
             self.ax[i].cla()
             for m_val, mode in var_allms.items():
-                self.ax[i].plot(self.r, mode, label=f'{m_val}') 
+                r = sqrt(linspace(0.,1.,len(mode))) # need to read this properly from the h5 file probably
+                self.ax[i].plot(r, mode, label=f'{m_val}') 
                 if self['visible']['title']:
                     self.ax[i].set_title(f'Variable {self.varnrs[i]+1}, {self._getlabel(self.xkey)} = {self.spar_list[val]:.4f}')
                 self.ax[i].legend()
