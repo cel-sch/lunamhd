@@ -36,10 +36,10 @@ class lunaScan(object):
         #'last_ev': last EV used as guess for next one, 'polynom_ev': polynomial fit used as guess for next one
 
         ### Default path stuff
-        self.inputpath_root = Path('/users/cs2427/lunamhd')
-        #self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
-        self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
-        #self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
+        # self.inputpath_root = Path('/users/cs2427/lunamhd')
+        self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
+        # self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
+        self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
 
         ### Define path to input file. Default is lunamhd/Input/default.in
         self.inputfile = inputfile

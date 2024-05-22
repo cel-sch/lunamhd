@@ -209,10 +209,10 @@ class plot_multi(object):
         elif type(reader) == AEmhd.Reader.AEread:
             if self['AE_visible']['gam']:
                 x_vals, gam_vals, _ = self._load_data(reader = reader, scan = scan)
-                self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
+                self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel} DE', markersize=self['markersize'])
             if self['AE_visible']['a_gam']:
                 x_vals, _, a_gam_vals = self._load_data(reader = reader, scan = scan)
-                self.ax.plot(x_vals, gam_vals, self.asy_lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
+                self.ax.plot(x_vals, a_gam_vals, self.asy_lstyle, label=f'{self.scanlabel} AE', markersize=self['markersize'])
         
     def draw_fig(self):
         for reader in self.readers:
