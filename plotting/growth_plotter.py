@@ -142,7 +142,7 @@ class plot_growth(object):
         return scans
 
     def _make_point_info(self):
-        info = ''
+        info = f"runid = {self.reader.info['runid']}\n"
         for key, val in self.reader.info['fixedparams'].items():
             if type(val) in ['int', float, float64]:
                 info += f"{self._getlabel(key)} = {val:.4f}\n"

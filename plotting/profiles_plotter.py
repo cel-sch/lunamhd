@@ -10,6 +10,7 @@ from numpy import linspace, sqrt, array, asarray, float64
 
 from matplotlib.pyplot import figure, axes, subplots, show, ion, tight_layout, rcParams
 from matplotlib.widgets import Slider, Button
+from matplotlib.ticker import FormatStrFormatter
 
 default_settings = {'suptitle': None,
                     'title':None,
@@ -83,6 +84,8 @@ class plot_profiles(object):
             rcParams['axes.grid'] = True
 
         self.fig, self.ax = subplots(nrows=2, ncols=4, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
+        self.ax.yaxis.set_major_formatter(FormatStrFormatter('%.5f'))
+
         self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
         self.fig.set_tight_layout(True)
 

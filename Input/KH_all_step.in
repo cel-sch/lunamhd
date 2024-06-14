@@ -1,0 +1,48 @@
+&fixed_params
+   profile = 'all_step'
+   beta0 = 0.005
+   omega_avg = 1.5
+   omega_step = 0.25
+   rho_avg = 1
+   rho_step = 0
+   beta_avg = 0.0075
+   beta_step = 0
+   rmaj = 10
+   a = 1
+   n = -1
+   rationalm = 2
+   sidebands = 5
+   b0 = 1
+   rs = 0
+   qs = 2
+   delq = 0.1
+   nu_q = 8
+   nu_n = 6
+   drstep = 0.15
+   init_evguess = 0.8
+   grid_res = 100
+/
+
+&initialisers
+   run_vmec = .true.
+   run_venus = .true.
+   peakedness = .false.
+   ev_guess_type = 'last_ev'
+   mode_type = 'KH'
+   vmec_ver = 9
+   splines = 'q', 'p', 'o', 't'
+/
+
+&info
+   runid = 
+   description = 'all splined test fig 5'
+   datetime = 
+/
+
+&scanparam_0
+   paramkey = 'omega_step'
+   nodes = 0.01, 0.3
+   nsteps = 16
+   vals = ,
+   descending = .true.
+/

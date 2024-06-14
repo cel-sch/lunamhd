@@ -166,9 +166,9 @@ class lunaRead(object):
     def profile_plot(self, scanparam = None, spar_list = None, settings = {}):
         return Plotters['Profiles'](self, scanparam, spar_list, settings)
 
-    def multi_plot(self, readers = [], settings = {}):
+    def multi_plot(self, readers = [], txts = {}, csvs = {}, settings = {}):
         readers.insert(0, self)
-        return Plotters['Multi'](readers, settings)
+        return Plotters['Multi'](readers = readers, txts = txts, csvs = csvs, settings = settings)
 
     ### DATA ANALYSIS FUNCTIONS ###
     def read_EFh5(self, file, varnr = 0):

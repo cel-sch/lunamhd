@@ -6,7 +6,7 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
-from numpy import sqrt
+from numpy import sqrt, loadtxt
 
 from matplotlib.pyplot import subplots, show, ion, axes, tight_layout
 from matplotlib.widgets import Slider, Button
@@ -25,13 +25,15 @@ default_settings = {'suptitle': None,
                                  'paper':{'title':10,'axis':9,'suptitle':12}},
                     'figsizes':{'general':[8.5,6],
                                 'paper':[4.5,3.5]},
-                    'linestyles':{'plain':'-x','asy':'D-'},
+                    'linestyles':{'plain':'-','asy':'D-','txt':'v--'},
                     'markersize':2,
                     'visible':{'suptitle':True, 'legend':True, 'grid':True}}
 
 class plot_multi(object):
-    def __init__(self, readers = [], settings = {}):
+    def __init__(self, readers = [], txts = {}, csvs = {}, settings = {}):
         self.readers = readers
+        self.txts = txts
+        self.csvs = csvs
         self.settings = {}
         defaults = deepcopy(default_settings)
         
@@ -55,6 +57,7 @@ class plot_multi(object):
         self.xkeys = {}
         self.ykeys = {}
         self.scankeys = {}
+        # self.txtdata = {} # for more complex txt file loading
 
         self.open_plot()
                 
@@ -169,6 +172,16 @@ class plot_multi(object):
                 print("NOTE: no way of retrieving mach1 for VENUS-MHD (yet?). mach0 being plotted.")
         return rotkey
 
+    # def _load_txt(self, txtfile):
+    #     x, y = loadtxt(txtfile, unpack = True)
+        
+    #     self.txtdata[f'{txtfname}'] = {}
+    #     self.txtdata[f'{txtfname}']['xdata'] = x
+    #     self.txtdata[f'{txtfname}']['ydata'] = y
+    #     self.txtdata[f'{txtfname}']['label'] = txtfname
+    #     self.txtdata[f'{txtfname}']['lstyle'] = '-'
+    #     return x, y
+
     def _load_data(self, reader, scan = {}):
         if scan:
             self.scanlabel = [reader.info['runid']]
@@ -200,19 +213,31 @@ class plot_multi(object):
             if self.scankeys[f'{reader}'] == 'omega' and self['rot_axis_type'] in ['mach0', 'mach1']: 
                 _, x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], paramSpecs = scan)
 
+        # for txtfname, txtf in self.txts:
+        #     self._load_txt(txtfile = txtf)
+
         return x_vals, gam_vals, a_gam_vals
 
-    def plot_vals(self, reader, scan = {}):
-        if type(reader) == lunamhd.lunaReader.lunaRead:
-            x_vals, gam_vals, _ = self._load_data(reader = reader, scan = scan)
-            self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
-        elif type(reader) == AEmhd.Reader.AEread:
-            if self['AE_visible']['gam']:
+    def plot_vals(self, reader = None, txtfname = None, csvfname = None, scan = {}):
+        if reader:
+            if type(reader) == lunamhd.lunaReader.lunaRead:
                 x_vals, gam_vals, _ = self._load_data(reader = reader, scan = scan)
-                self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel} DE', markersize=self['markersize'])
-            if self['AE_visible']['a_gam']:
-                x_vals, _, a_gam_vals = self._load_data(reader = reader, scan = scan)
-                self.ax.plot(x_vals, a_gam_vals, self.asy_lstyle, label=f'{self.scanlabel} AE', markersize=self['markersize'])
+                self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
+            elif type(reader) == AEmhd.Reader.AEread:
+                if self['AE_visible']['gam']:
+                    x_vals, gam_vals, _ = self._load_data(reader = reader, scan = scan)
+                    self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel} DE', markersize=self['markersize'])
+                if self['AE_visible']['a_gam']:
+                    x_vals, _, a_gam_vals = self._load_data(reader = reader, scan = scan)
+                    self.ax.plot(x_vals, a_gam_vals, self.asy_lstyle, label=f'{self.scanlabel} AE', markersize=self['markersize'])
+        elif txtfname:
+            x_vals, y_vals = loadtxt(self.txts[f'{txtfname}'], unpack = True)
+            self.ax.plot(x_vals, y_vals, '--v', label = txtfname, markersize=self['markersize'])
+        elif csvfname:
+            x_vals, y_vals = loadtxt(self.csvs[f'{csvfname}'], delimiter = ',', unpack = True, skiprows=1)
+            y_vals = [i*0.1 for i in y_vals] # need a more general way to renormalize this
+            self.ax.plot(x_vals, y_vals, '--v', label = csvfname, markersize=self['markersize'])
+
         
     def draw_fig(self):
         for reader in self.readers:
@@ -222,6 +247,12 @@ class plot_multi(object):
                     self.plot_vals(reader = reader, scan = scan)
             else:
                 self.plot_vals(reader = reader)
+
+        for txtfname in self.txts.keys():
+            self.plot_vals(txtfname = txtfname)
+
+        for csvfname in self.csvs.keys():
+            self.plot_vals(csvfname = csvfname)
                             
         self.ax.set_ylabel(self._y_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
         self.ax.set_xlabel(self._x_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis']) 

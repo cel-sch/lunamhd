@@ -24,10 +24,11 @@ from VenusMHDpy.library import find_nearest
 
 class lunaScan(object):
     def __init__(self, runid = None, inputfile = None, inputpath = None):
-        profiles = ['rho_t', 'rho_p', 'pt', 'rot']
+        profiles = ['rot', 'all_step']
         self.params = {'profile':'rho_t', 'mach':0.0, 'omegahat':0.0, 'beta0':0.05, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5, 'init_evguess':1E-1,
+                       'omega_avg':1, 'omega_step':0.9, 'rho_avg':1, 'rho_step':0, 'beta_avg':0.05, 'beta_step':0,
                         'd':0., 'el':0., 'tr':0., 'mpol':15, 'ntor':0, 'rstep':0.5, 'drstep':0.15, 
-                        'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'q0':0.938, 'qs':None, 'nu_q':2.,
+                        'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'delq':0.938, 'qs':None, 'nu_q':2.,
                             'grid_res':100}
         
         self.initialisers = {'run_vmec': True, 'run_venus': True, 'toplot': True, 'peakedness': True, 
@@ -44,7 +45,7 @@ class lunaScan(object):
         ### Define path to input file. Default is lunamhd/Input/default.in
         self.inputfile = inputfile
         if inputfile is None:
-            self.inputfile = 'default.in'
+            self.inputfile = 'default_KH.in'
         self.inputpath = inputpath
         if self.inputpath is None:
             self.inputpath = Path(self.inputpath_root / f'Input/{self.inputfile}')
@@ -59,10 +60,8 @@ class lunaScan(object):
         self.runid = runid
 
         ### Define outpath
-        if self['mode_type'] == 'KH':
-            self.outpath = Path(self.outputpath_root / 'KH')
-        elif self['mode_type'] == 'IK':
-            self.outpath = Path(self.outputpath_root / 'IK')
+        mode_type = f"{self['mode_type']}"
+        self.outpath = Path(self.outputpath_root / mode_type)
 
     def __getitem__(self, key):
         if key in self.params:
@@ -297,7 +296,7 @@ class lunaScan(object):
         
         #Grid
         #==========================
-        s2 = np.linspace(0.,1.,100)
+        s2 = np.linspace(0.,1.,100) # can't change the grid size when splining?
         s  = np.sqrt(s2)
         #==========================
         
@@ -311,6 +310,16 @@ class lunaScan(object):
         # Omega --> Omega/Omega0
         ### Pressure: care with P vs PVMEC
 
+        def tanh_profile(y_avg, y_step):
+            # for tanh profile of the form 0.5*B(1 + tanh[(r0^2-r^2)/dr0^2]) + A
+            B = 2*y_step
+            A = y_avg - y_step
+
+            prof = B*0.5*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + A
+            if any(i < 0 for i in prof):
+                print('ERROR: profile contains a negative value. Check y_avg and y_step are correctly specified (did you swap them?).')
+            return prof, A, B
+
         mach = self['mach']
         beta0 = self['beta0']
         n0 = self['n0']
@@ -320,34 +329,34 @@ class lunaScan(object):
             rstep = self['rstep']
             drstep = self['drstep']
 
-            if self['profile'] != 'rot':
-                Omega = (1.-s**6)
-                
-                if self['profile'] in ['rho_t', 'rho_p']:
-                    n_ = .5*n0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-                    
-                    if self['profile'] == 'rho_t':
-                        n_ = n_ + 0.05
-                        T = .5*(1 - np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
-                        P = beta0*B0**2/(2*mu0*n0*T[0]) # should be constant
-                        #P = beta0*B0**2/(2*mu0*n0*T[0])*(1-s2**3)
-                        
-                    elif self['profile'] == 'rho_p':
-                        T = np.ones_like(s)
-                        P = beta0*B0**2*n_*T/(2*mu0*n0) # stepped like n_ 
+            if self['profile'] == 'all_step':
+                Omega = tanh_profile(self['omega_avg'], self['omega_step'])[0]
 
-                elif self['profile'] == 'PT':
-                    n_ = n0*np.ones_like(s)
-                    T = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + 0.05
-                    P0 = beta0*B0**2*n_*T/(2*mu0*n0)
-                    P = .5*P0*(1 + np.tanh((rstep**2 - s2)/drstep**2))
+                n_ = tanh_profile(self['rho_avg'], self['rho_step'])[0] + 0.01
+
+                if self['profile'] == 'all_step_tvom':
+                    beta0 = self['beta_avg']
+                    beta1 = beta0*(n_[-1]/n_[0])*(Omega[-1]/Omega[0])**4
+                    beta_avg = (beta0 + beta1)/2
+                    beta_step = (beta0 - beta1)/2
+                    beta = tanh_profile(beta_avg, beta_step)
+                else:
+                    beta = tanh_profile(self['beta_avg'], self['beta_step'])[0]
+                    beta0 = beta[0]
+                self.params['beta0'] = beta0
+                P = beta*B0**2/(2*mu0) 
+
+                T = 2*mu0*n_[0]*P/(beta0*B0**2*n_)
+
+                eps_a = r0/R0
+                mach = Omega[0]/np.sqrt(beta0/eps_a**2) # assumes Omega is normalised as Omega/(w_A*eps_a)
+                self.params['mach'] = mach
                 
             elif self['profile'] == 'rot':
                 Omega = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2))
                 n_ = n0*(1.-s**nu_n)
                 T = n0*(1.-s**6) + 0.01
-                P = beta0*B0**2*n_*T/(2*mu0*n0)  
-        
+                P = beta0*B0**2*n_*T/(2*mu0*n0)
         elif self['mode_type'] == 'IK':
             n_ = n0*1.-s**nu_n
             # n_ = np.ones_like(s)
@@ -411,9 +420,9 @@ class lunaScan(object):
         #======================================================================
         C.Current.NCURR  = 0     #0 for rotal transform, 1 for toroidal current density
         #======================================================================
-        qr = self['qr']
+        qr = self['rationalm']/(-self['n']) # n is given as a negative input because of Fourier expansion convention
         rs = self['rs'] # set to 0 to get qs = 1, this is r where q = qr, equivalent to r1 in Tom's IK work
-        q0 = self['q0']
+        q0 = qr + self['delq']
         nu_q = self['nu_q']
         
         if rs == 0:
@@ -443,6 +452,13 @@ class lunaScan(object):
                 print ('Insert a valid value for LRFP')
                 exit()
             C.Current.AI = AI
+
+        if self['mode_type'] == 'KH': 
+            if rs == 0:
+                qstep = q0+qs*self['rstep']**nu_q
+            else:
+                qstep = 1 - (1-q0)*(1 - (self['rstep']/rs)**nu_q)
+            self.qstep = qstep
 
         self.dico_vmec = {'ah':AH,'ah_aux_s':AH_AUX_S,'ah_aux_f':AH_AUX_F,'at':AT,'at_aux_s':AT_AUX_S,'at_aux_f':AT_AUX_F}
         
@@ -525,21 +541,21 @@ class lunaScan(object):
     	#Modify the default grid
     	#----------------------------------------------------------------------
         n = self['n'] # toroidal mode number, <0 because of how vars are expanded in n, m
-        n = -1
         RationalM = self['rationalm']
-        RationalM = 1
         Sidebands = self['sidebands']
-        Sidebands = 5
         stab.grid.Mmin = RationalM-Sidebands
         stab.grid.Mmax = RationalM+Sidebands
         stab.grid.Ntheta = eq.R.shape[0]
     
         stab.grid.N = 100
         stab.grid.N = eq.R.shape[1] - 2
-        stab.grid.bunching = False
-        stab.grid.bunchingQValues = [1.0,1.1, 1.2]
-        stab.grid.bunchingAmplitudes = [5.,5.,5.]
-        stab.grid.bunchingSigma = [0.02,0.02,0.02]
+        stab.grid.bunching = True
+        # stab.grid.bunchingQValues = [self.qstep - 0.01,self.qstep, self.qstep + 0.01]
+        # stab.grid.bunchingAmplitudes = [5.,5.,5.]
+        # stab.grid.bunchingSigma = [0.02,0.02,0.02]
+        stab.grid.bunchingQValues = [self.qstep]
+        stab.grid.bunchingAmplitudes = [5.]
+        stab.grid.bunchingSigma = [0.02]
         
     	#Build grid. If bunching with q values, then equilibrium quantities (radial grid s and safety factor) are required.
         stab.grid.BuildGrid(eq.s,eq.q)
@@ -743,7 +759,7 @@ class lunaScan(object):
             rundata[runid] = raw_scan['data'].item()
             
         runinfo['scanparams'] = self.scanparams
-        fixed_params = ['profile','drstep','mach','q0','beta0','rationalm','n', 'rmaj']
+        fixed_params = ['profile','drstep','mach','delq','beta0','rationalm','n', 'rmaj']
         runinfo['fixedparams'] = {}
         for key in fixed_params:
             if key not in self.scanparams:
