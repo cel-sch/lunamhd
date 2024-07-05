@@ -1,25 +1,25 @@
 &fixed_params
    profile = 'all_step'
    mach = 0
-   omega_avg = 2
+   omega_avg = 1.5
    omega_step = 0.25
-   rho_avg = 1
-   rho_step = 0
+   rho_avg = 0.6
+   rho_step = 0.5
    beta_avg = 0.005
    beta_step = 0
    rmaj = 10
    a = 1
    n = -1
-   rationalm = 2
+   rationalm = 1
    sidebands = 5
    b0 = 1
    rs = 0
    qs = 2
-   delq = 0.01
+   delq = 0.1
    nu_q = 8
    nu_n = 6
-   drstep = 0.175
-   init_evguess = 0.5
+   drstep = 0.15
+   init_evguess = 0.001
    grid_res = 100
 /
 
@@ -27,7 +27,7 @@
    run_vmec = .true.
    run_venus = .true.
    peakedness = .false.
-   ev_guess_type = 'last_ev'
+   ev_guess_type = 'polynom_ev'
    mode_type = 'KH'
    vmec_ver = 9
    splines = 'o', 't', 'q', 'p'
@@ -35,14 +35,14 @@
 
 &info
    runid = ''
-   description = ''
+   description = 'Impurity scenario, reproducing impurity_omavg_beta_0.5 run'
    datetime = ''
 /
 
 &scanparam_0
-   paramkey = 'omega_step'
-   nodes = 0.01, 2
-   nsteps = 20
+   paramkey = 'omega_avg'
+   nodes = 0.5, 0.9, 2.5
+   nsteps = 16, 16
    vals = ,
-   descending = .true.
+   descending = False
 /

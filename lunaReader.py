@@ -11,8 +11,8 @@ from lunamhd.plotting import Plotters
 class lunaRead(object):
     def __init__(self, filename, filePath = None):
         self.filename = filename
-        self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
-        #self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
+        #self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
+        self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
         if filePath is None:
                 filePath = Path(self.outputpath_root / 'KH' / f'{self.filename}')
         else:
@@ -34,7 +34,7 @@ class lunaRead(object):
                     for skey in scan[pointkey][key].keys():
                         if skey == variable:
                             return scan[pointkey][key][skey]
-            print("ERROR: cannot find variable")
+            print(f"ERROR: cannot find variable {variable}")
             return
         else:
             return
@@ -166,9 +166,9 @@ class lunaRead(object):
     def profile_plot(self, scanparam = None, spar_list = None, settings = {}):
         return Plotters['Profiles'](self, scanparam, spar_list, settings)
 
-    def multi_plot(self, readers = [], txts = {}, csvs = {}, settings = {}):
+    def multi_plot(self, readers = [], txts = {}, csvs = {}, scan_specs = {}, settings = {}):
         readers.insert(0, self)
-        return Plotters['Multi'](readers = readers, txts = txts, csvs = csvs, settings = settings)
+        return Plotters['Multi'](readers = readers, txts = txts, csvs = csvs, scan_specs = scan_specs, settings = settings)
 
     ### DATA ANALYSIS FUNCTIONS ###
     def read_EFh5(self, file, varnr = 0):

@@ -25,8 +25,10 @@ from VenusMHDpy.library import find_nearest
 class lunaScan(object):
     def __init__(self, runid = None, inputfile = None, inputpath = None):
         profiles = ['rot', 'all_step']
-        self.params = {'profile':'rho_t', 'mach':0.0, 'omegahat':0.0, 'beta0':0.05, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5, 'init_evguess':1E-1,
-                       'omega_avg':1, 'omega_step':0.9, 'rho_avg':1, 'rho_step':0, 'beta_avg':0.05, 'beta_step':0,
+        self.params = {'profile':'rho_t', 'mach':0.0, 'omegahat':0.0, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5, 'init_evguess':1E-1,
+                       'omega_avg':1, 'omega_step':0.9, 'omega0':0, 'omega1':0,
+                       'rho_avg':1, 'rho_step':0, 'rho0':0, 'rho1':0,
+                       'beta_avg':0.05, 'beta_step':0, 'beta0':0, 'beta1':0,
                         'd':0., 'el':0., 'tr':0., 'mpol':15, 'ntor':0, 'rstep':0.5, 'drstep':0.15, 
                         'n0':1, 'nu_n':2, 'qr':1., 'rs':0.3, 'delq':0.938, 'qs':None, 'nu_q':2.,
                             'grid_res':100}
@@ -102,6 +104,9 @@ class lunaScan(object):
         for key in [x for x in scanparam_info.keys() if 'scanparam_' in x]:
             key_info = scanparam_info[key]
             paramkey = key_info['paramkey']
+            if paramkey not in self.params:
+                print('ERROR: specified scan parameter does not correspond to any of the possible input parameters.')
+                return
             self.scanorder.append(paramkey)
             if key_info['vals'] is None:
                 paramvals = self._make_param_vals(nodes = key_info['nodes'], nsteps = key_info['nsteps'], descending = key_info['descending'])
@@ -310,18 +315,30 @@ class lunaScan(object):
         # Omega --> Omega/Omega0
         ### Pressure: care with P vs PVMEC
 
-        def tanh_profile(y_avg, y_step):
-            # for tanh profile of the form 0.5*B(1 + tanh[(r0^2-r^2)/dr0^2]) + A
-            B = 2*y_step
-            A = y_avg - y_step
+        def step_profile(y_avg, y_step):
+            # for a tanh profile of the form 0.5*B(1 + tanh[(r0^2-r^2)/dr0^2]) + A
+            if y_step == 0:
+                #prof = y_avg*(1.-s**6)
+                prof = y_avg*np.ones_like(s)
+            else:
+                B = 2*y_step
+                A = y_avg - y_step
+                if self['profile'] == 'rot': # Omega1 = 0 case with all other profiles flat
+                    A = 0
+                    B = y_step
 
-            prof = B*0.5*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + A
-            if any(i < 0 for i in prof):
-                print('ERROR: profile contains a negative value. Check y_avg and y_step are correctly specified (did you swap them?).')
-            return prof, A, B
+                prof = B*0.5*(1 + np.tanh((rstep**2 - s2)/drstep**2)) + A
+                if any(i < 0 for i in prof):
+                    print('ERROR: profile contains a negative value. Check y_avg and y_step are correctly specified (did you swap them?).')
+            return prof
+        
+        def make_y0_y1(y_avg, y_step):
+            y0 = y_avg + y_step
+            y1 = y_avg - y_step
+            return y0, y1
 
         mach = self['mach']
-        beta0 = self['beta0']
+        beta0 = self['beta_avg']
         n0 = self['n0']
         nu_n = self['nu_n']
 
@@ -329,34 +346,29 @@ class lunaScan(object):
             rstep = self['rstep']
             drstep = self['drstep']
 
-            if self['profile'] == 'all_step':
-                Omega = tanh_profile(self['omega_avg'], self['omega_step'])[0]
+            if self['profile'] in ['all_step', 'all_step_tvo']: # rhostep = 0 with stepped omega, pressure is fine but having flat density AND pressure is bad so farpfp 
+                self.params['omega0'], self.params['omega1'] = make_y0_y1(self['omega_avg'], self['omega_step'])
+                self.params['rho0'], self.params['rho1'] = make_y0_y1(self['rho_avg'], self['rho_step'])
+                self.params['beta0'], self.params['beta1'] = make_y0_y1(self['beta_avg'], self['beta_step'])
+                beta0 = self.params['beta0']
 
-                n_ = tanh_profile(self['rho_avg'], self['rho_step'])[0] + 0.01
+                Omega = step_profile(self['omega_avg'], self['omega_step'])
+                n_ = step_profile(self['rho_avg'], self['rho_step']) + 0.01 # need +0.01 for 1/n_ in T
 
-                if self['profile'] == 'all_step_tvom':
-                    beta0 = self['beta_avg']
-                    beta1 = beta0*(n_[-1]/n_[0])*(Omega[-1]/Omega[0])**4
+                if self['profile'] == 'all_step_tvo':
+                    beta1 = beta0*(n_[-10]/n_[0])*(Omega[-1]/Omega[0])**4 # n_[-1] is not used because this can sometimes be a bit weird
                     beta_avg = (beta0 + beta1)/2
                     beta_step = (beta0 - beta1)/2
-                    beta = tanh_profile(beta_avg, beta_step)
+                    beta = step_profile(beta_avg, beta_step)
                 else:
-                    beta = tanh_profile(self['beta_avg'], self['beta_step'])[0]
-                    beta0 = beta[0]
-                self.params['beta0'] = beta0
+                    beta = step_profile(self['beta_avg'], self['beta_step'])    
                 P = beta*B0**2/(2*mu0) 
-
-                T = 2*mu0*n_[0]*P/(beta0*B0**2*n_)
+                T = 2*mu0*n_[0]*P/(beta0*B0**2*n_) + 0.01 # need +0.01 for 1/T in PVMEC
 
                 eps_a = r0/R0
                 mach = Omega[0]/np.sqrt(beta0/eps_a**2) # assumes Omega is normalised as Omega/(w_A*eps_a)
                 self.params['mach'] = mach
                 
-            elif self['profile'] == 'rot':
-                Omega = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2))
-                n_ = n0*(1.-s**nu_n)
-                T = n0*(1.-s**6) + 0.01
-                P = beta0*B0**2*n_*T/(2*mu0*n0)
         elif self['mode_type'] == 'IK':
             n_ = n0*1.-s**nu_n
             # n_ = np.ones_like(s)
@@ -464,12 +476,10 @@ class lunaScan(object):
         
         #Change some control parameters
         #======================================================================
-        """
-        C.Control.PREC2D_THRESHOLD = 1.0E-13 
-        C.Control.NITER_ARRAY = [1999, 3999, 3999, 3999, 8999, 8999, 8999, 8999, 8999, 25999, 39999, 99999, 129999]
-        C.Control.NS_ARRAY    = [25, 73, 211, 321, 435, 449, 463, 475, 481, 483, 485, 487, 489]
-        C.Control.FTOL_ARRAY  = [1.0e-09, 1.0e-09, 5.0e-10, 5.0e-10, 5.0e-10, 1.0e-10, 5.0e-11, 5.0e-11, 5.0e-11, 5.0e-11, 1.0e-11, 1.0e-11, 5.0E-12]
-        """
+        # C.Control.PREC2D_THRESHOLD = 1.0E-13 
+        # C.Control.NITER_ARRAY = [1999, 3999, 3999, 3999, 8999, 8999, 8999, 8999, 8999, 25999, 39999, 99999, 129999]
+        # C.Control.NS_ARRAY    = [25, 73, 211, 321, 435, 449, 463, 475, 481, 483, 485, 487, 489]
+        # C.Control.FTOL_ARRAY  = [1.0e-09, 1.0e-09, 5.0e-10, 5.0e-10, 5.0e-10, 1.0e-10, 5.0e-11, 5.0e-11, 5.0e-11, 5.0e-11, 1.0e-11, 1.0e-11, 5.0E-12]
         #======================================================================
         
         #Run VMEC Fixed boundary VMEC
@@ -550,12 +560,12 @@ class lunaScan(object):
         stab.grid.N = 100
         stab.grid.N = eq.R.shape[1] - 2
         stab.grid.bunching = True
-        # stab.grid.bunchingQValues = [self.qstep - 0.01,self.qstep, self.qstep + 0.01]
-        # stab.grid.bunchingAmplitudes = [5.,5.,5.]
-        # stab.grid.bunchingSigma = [0.02,0.02,0.02]
-        stab.grid.bunchingQValues = [self.qstep]
-        stab.grid.bunchingAmplitudes = [5.]
-        stab.grid.bunchingSigma = [0.02]
+        stab.grid.bunchingQValues = [self.qstep - 0.01,self.qstep, self.qstep + 0.01]
+        stab.grid.bunchingAmplitudes = [5.,5.,5.]
+        stab.grid.bunchingSigma = [0.02,0.02,0.02]
+        # stab.grid.bunchingQValues = [self.qstep]
+        # stab.grid.bunchingAmplitudes = [5.]
+        # stab.grid.bunchingSigma = [0.02]
         
     	#Build grid. If bunching with q values, then equilibrium quantities (radial grid s and safety factor) are required.
         stab.grid.BuildGrid(eq.s,eq.q)
@@ -583,12 +593,14 @@ class lunaScan(object):
         self.params['omegahat'] = Omegahat
         # Print equilibrium quantities
         print ('Parameters at the magnetic axis:')
+        print ('   Om_avg   = %.5f'%(self['omega_avg']))
+        print ('   Om_step   = %.5f'%(self['omega_step']))
         print ('   M0    = %.5f'%(np.sqrt(eq.M02)))
         print ('   v0/vA = %.5f'%(V0_Va))
         print ('   B0    = %.5f / %.5f [T]'%(eq.B0, self['b0']))
         print ('   R0    = %.5f / %.5f [m]'%(eq.R0, self['rmaj']))
-        print ('   P0    = %.5f / %.5f [Pa]'%(eq.P0, (self['beta0']*self['b0']**2/(2.*eq.mu0)))) #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
-        print ('   beta0 = %.5f / %.5f %%'%(2.*eq.mu0*eq.P0/eq.B0**2., self['beta0']))
+        print ('   P0    = %.5f / %.5f [Pa]'%(eq.P0, (self['beta_avg']*self['b0']**2/(2.*eq.mu0)))) #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
+        print ('   beta0 = %.5f / %.5f %%'%(2.*eq.mu0*eq.P0/eq.B0**2., self['beta_avg']))
     	#----------------------------------------------------------------------
         
         if True:
@@ -661,7 +673,7 @@ class lunaScan(object):
             if self['run_venus']:
                 # Set EV guess and calculate the growth rate
                 if self['ev_guess_type'] == 'last_ev':
-                    if vidx <= 1:
+                    if vidx <= 0:
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = None, idx = vidx)
                     else:
                         lastrun = output1d[f'{scanid}_{vidx-1}']
@@ -739,6 +751,7 @@ class lunaScan(object):
         rundata = {}
         runinfo = {}
         scans = deepcopy(self.scans)
+        missing_scans = []
         if self.scans:
             print(f'self.scans = {self.scans}')
             for n, scan in enumerate(self.scans):
@@ -750,6 +763,7 @@ class lunaScan(object):
                     rundata[scanid] = raw_scan['data'].item()
                 except:
                     print(f'Scan {scan} output file not found. May not have converged.')
+                    missing_scans.append(scan)
                     scans.remove(scan) # remove the skipped scan from the scanlist for the final output file
                     continue
                 print(scan)
@@ -759,13 +773,14 @@ class lunaScan(object):
             rundata[runid] = raw_scan['data'].item()
             
         runinfo['scanparams'] = self.scanparams
-        fixed_params = ['profile','drstep','mach','delq','beta0','rationalm','n', 'rmaj']
+        fixed_params = ['profile','drstep','mach','delq','rho_step','rho_avg','beta_step','beta_avg','omega_step','omega_avg','rationalm','n', 'rmaj']
         runinfo['fixedparams'] = {}
         for key in fixed_params:
             if key not in self.scanparams:
                 runinfo['fixedparams'][key] = self[key]
         runinfo['scanorder'] = self.scanorder
         runinfo['scans'] = self.scans
+        runinfo['missing_scans'] = missing_scans
         runinfo['timestamp'] = datetime.now().strftime("%d-%m-%y_%H:%M")
         runinfo['runid'] = self.runid
         

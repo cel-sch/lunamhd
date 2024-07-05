@@ -39,10 +39,16 @@ class plot_growth(object):
                 print(f'ERROR: {key} not found.')
             else:
                 self.settings[key] = settings[key]
-                
-        self.labels = {'mach':'$\mathcal{M}$','beta0':'$β_0$','rmaj':'$R_0$','b0':'$B_0$',
-                       'gam':'$\hat{γ}$','wr':'$\hat{w}_r$','EV':'$\hat{ω}',
-                       'drstep':'$Δr_{step}$', 'q0':'$q_0$', 'rationalm':'m'}
+        
+        self.labels = {'omega':'$\hat{Ω}$','beta':'$\hat{β}$','delq':'$\hat{Δq}$','rho':'ρ','sig1':'σ', 'mach':'$\mathcal{M}$',
+                        'omega0':'$\hat{Ω}_0$','omega1':'$\hat{Ω}_1$','omega_avg':'$\hat{Ω}_{avg}$', 'omega_step':'$\hat{Ω}_{step}$',
+                        'rho0':'$ρ_0$','rho1':'$ρ_1$','rho_avg':'$ρ_{avg}$','rho_step':'$ρ_{step}$',
+                        'beta0':'$\hat{β}_0$','beta1':'$\hat{β}_1$','beta_avg':'$\hat{β}_{avg}$','beta_step':'$\hat{β}_{step}$',
+                        'T_ratio':'$T_0/T_1$',
+                        'rmaj':'$R_0$','b0':'$B_0$','drstep':'$Δr_{step}$', 'q0':'$q_0$', 'rationalm':'m',
+                        'eps_a':'$ε_a$','Gamma':'Γ','gam':'$\hat{γ}$','asygam':'$\hat{γ}_{asy}$',
+                        'y_step':'$(y_0-y_1)/2$', 'y_avg':'$y_{avg}$','y0':'$y_0$', 'y1':'$y_1$',
+                        'EV':'$\hat{ω}','a_EV':'$\hat{ω}_{asy}$','wr':'$\hat{w}_r$','asywr':'$\hat{w}_r _{asy}$'}
                 
         self.xkey = None
         self.ykeys = None

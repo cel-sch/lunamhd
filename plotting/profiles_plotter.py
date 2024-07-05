@@ -41,9 +41,15 @@ class plot_profiles(object):
             else:
                 self.settings[key] = settings[key]
                 
-        self.labels = {'mach':'$\mathcal{M}$','beta0':'$β_0$','rmaj':'$R_0$','b0':'$B_0$',
-                       'gam':'$\hat{γ}$','wr':'$\hat{w}_r$','EV':'$\hat{ω}',
-                       'drstep':'$Δr_{step}$', 'q0':'$q_0$', 'rationalm':'m'}
+        self.labels = {'omega':'$\hat{Ω}$','beta':'$\hat{β}$','delq':'$\hat{Δq}$','rho':'ρ','sig1':'σ', 'mach':'$\mathcal{M}$',
+                        'omega0':'$\hat{Ω}_0$','omega1':'$\hat{Ω}_1$','omega_avg':'$\hat{Ω}_{avg}$', 'omega_step':'$\hat{Ω}_{step}$',
+                        'rho0':'$ρ_0$','rho1':'$ρ_1$','rho_avg':'$ρ_{avg}$','rho_step':'$ρ_{step}$',
+                        'beta0':'$\hat{β}_0$','beta1':'$\hat{β}_1$','beta_avg':'$\hat{β}_{avg}$','beta_step':'$\hat{β}_{step}$',
+                        'T_ratio':'$T_0/T_1$',
+                        'rmaj':'$R_0$','b0':'$B_0$','drstep':'$Δr_{step}$', 'q0':'$q_0$', 'rationalm':'m',
+                        'eps_a':'$ε_a$','Gamma':'Γ','gam':'$\hat{γ}$','asygam':'$\hat{γ}_{asy}$',
+                        'y_step':'$(y_0-y_1)/2$', 'y_avg':'$y_{avg}$','y0':'$y_0$', 'y1':'$y_1$',
+                        'EV':'$\hat{ω}','a_EV':'$\hat{ω}_{asy}$','wr':'$\hat{w}_r$','asywr':'$\hat{w}_r _{asy}$'}
                 
         self.xkey = None
         self.ykeys = None
@@ -84,7 +90,6 @@ class plot_profiles(object):
             rcParams['axes.grid'] = True
 
         self.fig, self.ax = subplots(nrows=2, ncols=4, figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
-        self.ax.yaxis.set_major_formatter(FormatStrFormatter('%.5f'))
 
         self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
         self.fig.set_tight_layout(True)
@@ -157,11 +162,13 @@ class plot_profiles(object):
         self.ax[0,0].plot(s, prof_dict['temp'])
         self.ax[0,0].set_ylabel(r'$T/T_0$')
         self.ax[0,0].set_xlabel('s')
+        # self.ax[0,0].yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
         self.ax[0,1].cla()
         self.ax[0,1].plot(s, prof_dict['q'])
         self.ax[0,1].set_ylabel(r'q')
         self.ax[0,1].set_xlabel('s')
+        # self.ax[0,1].yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
         self.ax[0,2].cla()
         self.ax[0,2].plot(s, prof_dict['press'], label=r'$P(s)$')
@@ -170,6 +177,7 @@ class plot_profiles(object):
         self.ax[0,2].tick_params('x', labelbottom=False)
         self.ax[0,2].set_ylabel(r'$\bar{P}$ [Pa]')
         self.ax[0,2].set_xlabel('s')
+        # self.ax[0,2].yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
         self.ax[0,3].cla()
         self.ax[0,3].plot(R[:,-1]*R0, Z[:,-1]*R0)
@@ -177,21 +185,25 @@ class plot_profiles(object):
         self.ax[0,3].set_xlabel(r'R [m]')
         self.ax[0,3].set_ylabel(r'Z [m]')
         self.ax[0,3].set_aspect('equal')
+        # self.ax[0,3].yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
         self.ax[1,0].cla()
         self.ax[1,0].plot(s, prof_dict['U'])
         self.ax[1,0].set_ylabel(r'$U$ $[m^{-2}]$')
         self.ax[1,0].set_xlabel('s')
+        # self.ax[1,0].yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
         self.ax[1,1].cla()
         self.ax[1,1].plot(s, prof_dict['rho'])
         self.ax[1,1].set_ylabel(r'$\bar{\rho}/\rho_0$')
         self.ax[1,1].set_xlabel('s')
+        # self.ax[1,1].yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
         self.ax[1,2].cla()
         self.ax[1,2].plot(s, prof_dict['omega'])
         self.ax[1,2].set_ylabel(r'$Ω/Ω_0$')
         self.ax[1,2].set_xlabel('s')
+        # self.ax[1,2].yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
 
         self.ax[1,3].cla()
         self.ax[1,3].grid(False)
@@ -199,6 +211,7 @@ class plot_profiles(object):
         self.ax[1,3].yaxis.set_visible(False)
         self.ax[1,3].set_frame_on(False)
         self.ax[1,3].text(0,0,self._make_point_info(scanval = self.spar_list[val]))
+        # self.ax[1,3].yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
         if not self['visible']['infoplot']:
             self.ax[1,3].set_axis_off()
 
