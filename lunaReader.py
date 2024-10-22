@@ -124,11 +124,12 @@ class lunaRead(object):
             EF_file = self('EF_file', paramSpecs)
             EF_dict[f'{EF_file}'] = {}
             for varnr in varnrs:
-                EF_dict[f'{EF_file}'][f'varnr_{varnr+1}'] = self.read_EFh5(file = EF_file, varnr = varnr)
+                EF_dict[f'{EF_file}'][f'varnr_{varnr+1}'] = self.read_EFh5(file = EF_file, varnr = varnr)[0]
+        s = self.read_EFh5(file = EF_file, varnr = varnr)[1] 
         if _returnBoth:
-            return spar_list, EF_dict
+            return spar_list, EF_dict, s
         else:
-            return EF_dict
+            return EF_dict, s
 
     def get_profiles_list(self, scanparam, spar_list = None, paramSpecs = {}, _returnBoth = True):
         # Returns the equilibrium profiles for the points specified
@@ -138,7 +139,7 @@ class lunaRead(object):
         if spar_list is None:
             spar_list = self.info['scanparams'][scanparam] # should only load in scan parameters which are not part of fixed parameter list
         else:
-            spar_list = self._make_list(spar_list)
+            spar_list = self._make_list(spar_list)                                                                                     
 
         prof_dict = {}
         for p in spar_list:
@@ -179,13 +180,12 @@ class lunaRead(object):
         grid = GRID()
         mode_allms = {}
         with h5py.File(file, 'r') as f:
-            grid.S = f['Grid']['S'][()]
-            r = grid.S
+            s = f['Grid']['S'][()]
             for key in [x for x in f['Variables']['EvaluatedModes'].keys() if f'var{varnr}' in x]:
                 mode = f['Variables']['EvaluatedModes'][key][()]
                 mval = key.split("=",1)[1]
                 mode_allms[f'm={mval}'] = mode
-        return mode_allms
+        return mode_allms, s
 
     def read_profh5(self, file):
         """
@@ -199,8 +199,8 @@ class lunaRead(object):
 
             # Unpack variables
             B0 = f['normalisation']['B0'][()]
-            P0 = f['normalisation']['B0'][()]
-            R0 = f['normalisation']['B0'][()]
+            P0 = f['normalisation']['P0'][()]
+            R0 = f['normalisation']['R0'][()]
             M02 = f['normalisation']['M02'][()]
 
             s = f['profiles']['s'][()]
@@ -227,12 +227,18 @@ class lunaRead(object):
             profile_params['U'] = U/R0**2
             
             profile_params['R'] = R
-            profile_params['R0'] = R0
             profile_params['Z'] = Z
 
             profile_params['s'] = s
+
+            profile_params['B0'] = B0
+            profile_params['P0'] = P0
+            profile_params['R0'] = R0
+            profile_params['M02'] = M02
+            profile_params['p'] = P
         
         return profile_params
+
 
 
 

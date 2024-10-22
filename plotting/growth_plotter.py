@@ -6,15 +6,15 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
-from numpy import float64
+from numpy import float64, pi, linspace
 
-from matplotlib.pyplot import subplots, show, ion, axes, tight_layout
+from matplotlib.pyplot import subplots, show, ion, axes, tight_layout, text
 from matplotlib.widgets import Slider, Button
 
 default_settings = {'suptitle': None,
                     'title':None,
                     'y_axis_type':'eigenval', # ['eigenval','margin_stab']
-                    'x_axis_type':'initparam',
+                    'x_axis_type':'initparam', # ['initparam', 'peakedness', 'peakedness2', 'peakedness_anal', 'xstep_norm']
                     'EV_visible':{'gam':True, 'wr':False},
                     'EV_guess':True,
                     'fig_type':'general', # ['paper', 'singleplot']
@@ -22,7 +22,7 @@ default_settings = {'suptitle': None,
                                  'paper':{'title':10,'axis':9,'suptitle':12}},
                     'figsizes':{'general':[8.5,6],
                                 'paper':[4.5,3.5]},
-                    'linestyles':{'plain':'-x','asy':'D-'},
+                    'linestyles':{'plain':'D-','asy':'-'},
                     'markersize':2,
                     'visible':{'suptitle':True, 'legend':True, 'grid':True}}
 
@@ -40,15 +40,17 @@ class plot_growth(object):
             else:
                 self.settings[key] = settings[key]
         
-        self.labels = {'omega':'$\hat{Ω}$','beta':'$\hat{β}$','delq':'$\hat{Δq}$','rho':'ρ','sig1':'σ', 'mach':'$\mathcal{M}$',
+        self.labels = {'omega':'$\hat{Ω}$','beta':'$β$','delq':'$\hat{Δq}$','rho':'ρ','sig1':'σ', 'mach':'$\mathcal{M}$',
                         'omega0':'$\hat{Ω}_0$','omega1':'$\hat{Ω}_1$','omega_avg':'$\hat{Ω}_{avg}$', 'omega_step':'$\hat{Ω}_{step}$',
                         'rho0':'$ρ_0$','rho1':'$ρ_1$','rho_avg':'$ρ_{avg}$','rho_step':'$ρ_{step}$',
-                        'beta0':'$\hat{β}_0$','beta1':'$\hat{β}_1$','beta_avg':'$\hat{β}_{avg}$','beta_step':'$\hat{β}_{step}$',
+                        'beta0':'$β_0$','beta1':'$β_1$','beta_avg':'$β_{avg}$','beta_step':'$β_{step}$',
                         'T_ratio':'$T_0/T_1$',
+                        'rho0_pkd':'$ρ$ peakedness', 'omega0_pkd':'$\hat{Ω}$ peakedness', 'beta0_pkd':'$\hat{β}$ peakedness',
+                        'rho0_xstep':'$(ρ_0-ρ_1)/ρ_{avg}$', 'omega0_xstep':'$(\hat{Ω}_0-\hat{Ω}_1)/\hat{Ω}_{avg}$', 'beta0_xstep':'$(\hat{β}_0-\hat{β}_1)/\hat{β}_{avg}$',
                         'rmaj':'$R_0$','b0':'$B_0$','drstep':'$Δr_{step}$', 'q0':'$q_0$', 'rationalm':'m',
-                        'eps_a':'$ε_a$','Gamma':'Γ','gam':'$\hat{γ}$','asygam':'$\hat{γ}_{asy}$',
+                        'eps_a':'$ε_a$','Gamma':'Γ','gam':'$γ/ω_A$','asygam':'asymptotic $γ/ω_A$',
                         'y_step':'$(y_0-y_1)/2$', 'y_avg':'$y_{avg}$','y0':'$y_0$', 'y1':'$y_1$',
-                        'EV':'$\hat{ω}','a_EV':'$\hat{ω}_{asy}$','wr':'$\hat{w}_r$','asywr':'$\hat{w}_r _{asy}$'}
+                        'EV':'$ω/ω_A$','a_EV':'asymptotic $ω/ω_A$','wr':'$ω_r/ω_A$','asywr':'asymptotic $ω_r/ω_A$'}
                 
         self.xkey = None
         self.ykeys = None
@@ -158,12 +160,24 @@ class plot_growth(object):
         return info
         
     def _load_x_axis(self, axis_type):
-        if axis_type not in ['initparam']:
-            print("ERROR: axis_type not found, valid types ['initparam']")
+        if axis_type not in ['initparam', 'peakedness', 'peakedness2', 'peakedness_anal']:
+            print("ERROR: axis_type not found, valid types ['initparam', 'peakedness', 'peakedness2']")
             return
+        self.initparam = deepcopy(self.reader.info['scanorder'][0])
+        self.spar_list = self.reader.info['scanparams'][self.initparam]
+        self.xkey = self.initparam
+        if self.xkey.endswith('_avg'):
+            self.xkey = self.xkey.replace('_avg','')
+        elif self.xkey.endswith('_step'):
+            self.xkey = self.xkey.replace('_step','')
+        self.xkey0 = self.xkey + '0'
+
         if axis_type == 'initparam':
-            self.xkey = self.reader.info['scanorder'][0]
-        self._x_ax_label = self._getlabel(self.xkey)
+            self._x_ax_label = self._getlabel(self.xkey0)
+        elif axis_type in ['peakedness', 'peakedness2','peakedness_anal']: # xkey only gets used for the label in this case
+            self._x_ax_label = self._getlabel(f'{self.xkey}_pkd')
+        elif axis_type == 'xstep_norm':
+            self._x_ax_label = self._getlabel(f'{self.xkey}_xstep')
         
     def _load_y_axis(self, axis_type):
         if axis_type not in ['eigenval']:
@@ -173,6 +187,46 @@ class plot_growth(object):
             self.ykeys = 'EV'
             self._y_ax_label = self._getlabel('gam')
 
+    def load_stepavg(self, prof, scan = {}):
+        mu0 = 4.*pi*1.0E-07
+        steps = []
+        avgs = []
+        for idx in linspace(0, len(self.spar_list)-1):
+            for key, vals in self.reader.get_profiles_list(scanparam = self.xkey, spar_list = self.spar_list[idx], paramSpecs = scan, _returnBoth = False).items():
+                EF_file = key
+                prof_dict = vals
+            EF_file = EF_file.split('/')[-1]
+
+            B0 = prof_dict['B0']
+            P0 = prof_dict['P0']
+            R0 = prof_dict['R0']
+            M02 = prof_dict['M02']
+
+            if prof in ['omega', 'Omega']:
+                Omega = prof_dict['Omega']
+                Omega = Omega*B0/(M02*mu0*P0)
+
+                step = (Omega[0] - Omega[-3])/2
+                avg = (Omega[0] + Omega[-3])/2
+            elif prof == 'rho':
+                rho = prof_dict['rho']
+                rho0 = self.reader.get_1d_list(scanparam = self.xkey, variable = 'rho0', spar_list = self.spar_list[idx], paramSpecs = scan, _returnBoth = False)
+                rho = rho*rho0
+
+                step = (rho[0] - rho[-3])/2
+                avg = (rho[0] + rho[-3])/2
+            elif prof == 'beta':
+                P = prof_dict['P']
+                eps_a = 1/R0
+                P = 2*P/eps_a**2
+
+                step = (P[0] - P[-3])/2
+                avg = (P[0] + P[-3])/2
+
+            steps.append(step)
+            avgs.append(avg)
+        return steps, avgs
+
     def plot_vals(self, scan = None):
         if scan: 
             self.scanlabel = [f'{self._getlabel(key)}={keyval}' for key, keyval in scan.items()] # empty for 1D scans
@@ -181,7 +235,22 @@ class plot_growth(object):
             self.scanlabel = self._getlabel('gam')
             scan = {} # to set paramSpecs to {}
 
-        x_vals, y_vals = self.reader.get_1d_list(self.xkey, self.ykeys, paramSpecs = scan) # need to check what happens if paramSpecs = None
+        if self.xkey == self.initparam:
+            x_vals = self.reader.info['scanparams'][self.xkey0]
+        else:
+            x_vals = self.reader.get_1d_list(self.initparam, self.xkey0, spar_list = self.spar_list,  paramSpecs = scan, _returnBoth = False)
+        if self['x_axis_type'] == 'peakedness':
+            x_vals = self.reader.get_1d_list(self.initparam, 'peakedness', spar_list = self.spar_list,  paramSpecs = scan, _returnBoth = False)
+        elif self['x_axis_type'] == 'peakedness2':
+            x_vals = self.reader.get_1d_list(self.initparam, 'peakedness_avgnorm', spar_list = self.spar_list,  paramSpecs = scan, _returnBoth = False)
+        elif self['x_axis_type'] == 'peakedness_anal':
+            x_vals = self.reader.get_1d_list(self.initparam, 'peakedness_anal', spar_list = self.spar_list,  paramSpecs = scan, _returnBoth = False)
+        elif self['x_axis_type'] == 'xstep_norm':
+            x_step = self.load_stepavg(self.xkey, scan = scan)[0]
+            x_avg = self.load_stepavg(self.xkey, scan = scan)[1]
+            x_vals = [i/j for i, j in zip(x_step, x_avg)]
+
+        y_vals = self.reader.get_1d_list(self.initparam, self.ykeys, spar_list = self.spar_list,  paramSpecs = scan, _returnBoth = False) # need to check what happens if paramSpecs = None
             
         if self['EV_visible']['gam']:
             gam_vals = [i.real for i in y_vals]
@@ -192,7 +261,7 @@ class plot_growth(object):
                 self.ax.plot(x_vals, gam_guess_vals, self.lstyle, label=f'{self.scanlabel} guess', markersize=self['markersize'])
         if self['EV_visible']['wr']:
             wr_vals = [i.imag for i in y_vals]
-            self.ax.plot(x_vals, wr_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
+            self.ax.plot(x_vals, wr_vals, self.lstyle, label=f"{self._getlabel('wr')}", markersize=self['markersize'])
         
     def draw_fig(self):
         self.lstyle = self['linestyles']['plain']

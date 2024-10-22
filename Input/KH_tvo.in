@@ -1,9 +1,9 @@
 &fixed_params
    profile = 'all_step_tvo'
    mach = 0
-   omega_avg = 2
-   omega_step = 0.25
-   rho_avg = 1
+   omega_avg = 1.5
+   omega_step = 0.15
+   rho_avg = 1.5
    rho_step = 0
    beta_avg = 0.005
    beta_step = 0
@@ -15,10 +15,10 @@
    b0 = 1
    rs = 0
    qs = 2
-   delq = 0.01
+   delq = 0.1
    nu_q = 8
    nu_n = 6
-   drstep = 0.15
+   drstep = 0.17
    init_evguess = 0.5
    grid_res = 100
 /
@@ -34,15 +34,16 @@
 /
 
 &info
-   runid = 'rotonly_tempvrot_21'
+   runid = 'tvo_rhostep0_2_1_drstep0.17'
    description = ''
-   datetime = '29-06-24_21:12'
+   datetime = '23-07-24_13:04'
 /
 
 &scanparam_0
-   paramkey = 'omega_step'
-   nodes = 0.6, 0.7
-   nsteps = 1
+   paramkey = 'rho_step'
+   nodes = 0, 1.2
+   nsteps = 20
    vals = ,
    descending = .true.
 /
+

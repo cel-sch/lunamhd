@@ -4,6 +4,7 @@ Created on Mon Feb 13 11:10:38 2023
 
 @author: celin
 """
+import h5py
 import numpy as np
 import scipy.integrate as spi
 import matplotlib.pyplot as plt
@@ -24,7 +25,7 @@ from VenusMHDpy.library import find_nearest
 
 class lunaScan(object):
     def __init__(self, runid = None, inputfile = None, inputpath = None):
-        profiles = ['rot', 'all_step']
+        profiles = ['rot_0', 'all_step', 'all_step_tvo']
         self.params = {'profile':'rho_t', 'mach':0.0, 'omegahat':0.0, 'rmaj':10., 'a':1., 'b0':1., 'n':-1, 'rationalm':1, 'sidebands':5, 'init_evguess':1E-1,
                        'omega_avg':1, 'omega_step':0.9, 'omega0':0, 'omega1':0,
                        'rho_avg':1, 'rho_step':0, 'rho0':0, 'rho1':0,
@@ -64,6 +65,9 @@ class lunaScan(object):
         ### Define outpath
         mode_type = f"{self['mode_type']}"
         self.outpath = Path(self.outputpath_root / mode_type)
+
+        ### Copy input file to output location
+        self._copyinput()
 
     def __getitem__(self, key):
         if key in self.params:
@@ -140,6 +144,17 @@ class lunaScan(object):
         if self.initialisers['splines'] is None:
             self.initialisers['splines'] = []
 
+    def _copyinput(self):
+        run_saveloc = Path(f"{self.outpath}/{self.runid}")
+        run_saveloc.mkdir(parents=True, exist_ok=True)
+        # add any new info to the final inputfile
+        inputfile = Path.cwd() / self.inputpath
+        inputfile_nml = f90.read(inputfile)
+        inputfile_nml['info']['runid'] = self.runid
+        inputfile_nml['info']['datetime'] = datetime.now().strftime("%d-%m-%y_%H:%M")
+        with open(run_saveloc / self.inputfile, 'w') as f:
+            f90.write(inputfile_nml, f, force=True)
+
     def _make_scan_list(self):
         # Makes the list of e.g. [{'beta':1,'delq':0.1},{'beta':1,'delq':0.2}]
         scandim = self.scandim
@@ -199,8 +214,12 @@ class lunaScan(object):
             new_inputs['fixed_params'] = old_inputs['fixed_params']
             new_inputs['initialisers'] = old_inputs['initialisers']
             new_inputs['scanparam_0'] = old_inputs['scanparam_0']
-            with open(scan_subdir / self.inputfile, 'w') as f:
-                f90.write(new_inputs, f, force=True)
+            new_inputfile = scan_subdir / self.inputfile
+            if new_inputfile.is_file():
+                pass
+            else:
+                with open(scan_subdir / self.inputfile, 'w') as f: # is this overwriting the copied main input file? yes
+                    f90.write(new_inputs, f)
             
     def _write_scan_dirs(self):
         # Writes the scan subdir paths to a file 'scan_subdirs.txt'
@@ -220,39 +239,25 @@ class lunaScan(object):
         self._write_scan_dirs()
         return
             
-    ###### VMEC ######
-    def _peakedness1(self, r, y):
-        # Simplified peakedness calculation
-        
-        dlprof = len(y)-99 # to force the length of y to match r
-        dldprof = len(y)-100
-        
-        prof = y[dlprof:] # profile is equal to array of values given, skip y(a) since prof needs to be same length as dprof
-        dprof = [i/j for i, j in zip(np.diff(y[dldprof:]), np.diff(r))]
-        
-        p1 = spi.trapezoid(r[1:]*dprof/prof)
-        
-        return p1
-    
-    def _peakedness2(self, r, y, xi):
-        # Takes an array as y input. 
-        # Potential improvement: profiles are approximated as polynomials --> use the actual polynomial derivative and stuff? But sometimes they're spline
-        
-        prof = y[1:] # profile is equal to array of values given, skip y(a) since prof needs to be same length as dprof
-        dprof = [i/j for i, j in zip(np.diff(y), np.diff(r))]
-        
-        print(len(xi))
-        print(len(r[1:]))
-        print(len(dprof))
-        p2 = spi.trapezoid(xi[1:]*r[1:]*dprof/prof)/max(xi)    
-        
-        return p2
+    ###### VMEC ######    
+    def _peakedness(self, s, y, dyds, xi, figidx):
+        y = np.asarray(y)
+        dyds = np.asarray(dyds)
+        xi = np.asarray(xi)
+        xi_ = np.asarray(xi)
+        xi[1:] = np.asarray([i/j for (i, j) in zip(xi[1:], s[1:])]) # remove *s dependence that's probably in var1, skip s=0 point
+        xi = abs(np.asarray([i/max(abs(xi)) for i in xi])) # successfully normalises xi to 1
+        p2 = abs(spi.simps(xi*dyds, x=s))/np.mean(y) # with y_avg normalisation
+        p = abs(spi.simps(xi*dyds, x=s)) # without y_avg normalisation
 
-    def _build_VMEC_profile(self, param):
-        # able to pick between spline or polynomial
-        # special conditions for e.g. density(?) needing to have nonzero bit
-        # can tell it which parameter and it produces the right variable?
-        return
+        print(f"integral dy/ds: {spi.simps(dyds, x=s)}")
+        print(f"peakedness: {p}")
+
+        if figidx == 0:
+            plt.figure()
+            plt.plot(s, xi)
+            plt.savefig(f"{self.runid}_xi.png")
+        return p, p2
 
     def _buildVMEC(self, idx = 0):
               
@@ -346,28 +351,37 @@ class lunaScan(object):
             rstep = self['rstep']
             drstep = self['drstep']
 
+            self.params['omega0'], self.params['omega1'] = make_y0_y1(self['omega_avg'], self['omega_step'])
+            self.params['rho0'], self.params['rho1'] = make_y0_y1(self['rho_avg'], self['rho_step'])
+            self.params['beta0'], self.params['beta1'] = make_y0_y1(self['beta_avg'], self['beta_step']) # if beta_step=0, beta0=beta_avg
+
             if self['profile'] in ['all_step', 'all_step_tvo']: # rhostep = 0 with stepped omega, pressure is fine but having flat density AND pressure is bad so farpfp 
-                self.params['omega0'], self.params['omega1'] = make_y0_y1(self['omega_avg'], self['omega_step'])
-                self.params['rho0'], self.params['rho1'] = make_y0_y1(self['rho_avg'], self['rho_step'])
-                self.params['beta0'], self.params['beta1'] = make_y0_y1(self['beta_avg'], self['beta_step'])
                 beta0 = self.params['beta0']
 
                 Omega = step_profile(self['omega_avg'], self['omega_step'])
                 n_ = step_profile(self['rho_avg'], self['rho_step']) + 0.01 # need +0.01 for 1/n_ in T
 
                 if self['profile'] == 'all_step_tvo':
-                    beta1 = beta0*(n_[-10]/n_[0])*(Omega[-1]/Omega[0])**4 # n_[-1] is not used because this can sometimes be a bit weird
-                    beta_avg = (beta0 + beta1)/2
-                    beta_step = (beta0 - beta1)/2
-                    beta = step_profile(beta_avg, beta_step)
-                else:
-                    beta = step_profile(self['beta_avg'], self['beta_step'])    
+                    beta1 = beta0*(self['rho1']/self['rho0'])*(self['omega1']/self['omega0'])**4
+                    self.params['beta_avg'] = (beta0 + beta1)/2
+                    self.params['beta_step'] = (beta0 - beta1)/2
+                    self.params['beta0'], self.params['beta1'] = make_y0_y1(self['beta_avg'], self['beta_step'])
+
+                beta = step_profile(self['beta_avg'], self['beta_step'])    
                 P = beta*B0**2/(2*mu0) 
                 T = 2*mu0*n_[0]*P/(beta0*B0**2*n_) + 0.01 # need +0.01 for 1/T in PVMEC
 
                 eps_a = r0/R0
-                mach = Omega[0]/np.sqrt(beta0/eps_a**2) # assumes Omega is normalised as Omega/(w_A*eps_a)
+                mach = np.sqrt(self['rho0']/self['rho_avg'])*self['omega0']/np.sqrt((beta0/eps_a**2)) # assumes Omega is normalised as Omega/(w_A_bar*eps_a)
+                # mach = self['omega0']/np.sqrt((beta0/eps_a**2)) # assumes Omega is normalised as Omega/(w_A0*eps_a)
                 self.params['mach'] = mach
+
+            elif self['profile'] == 'rot_0': # this is the 2013 PPCF case with rot1=0
+                Omega = .5*(1 + np.tanh((rstep**2 - s2)/drstep**2))
+                nu_n = 2 # for comparison with reaaaally old sims
+                n_ = n0*(1.-s**nu_n)
+                T = np.ones_like(s)
+                P = beta0*B0**2*n_*T/(2*mu0*n0)  
                 
         elif self['mode_type'] == 'IK':
             n_ = n0*1.-s**nu_n
@@ -388,6 +402,7 @@ class lunaScan(object):
             AH_AUX_F = Omega
             AH = [0]
         else:
+            print('=== POLYFITTING FLOW ===')
             AH_AUX_S = [0]
             AH_AUX_F = [0]
             AH = np.polyfit(s2,Omega,11)[::-1]
@@ -406,6 +421,7 @@ class lunaScan(object):
             C.Pressure.AM_AUX_S = s2
             C.Pressure.AM_AUX_F = PVMEC
         else:
+            print('=== POLYFITTING PRESSURE ===')
             AM = np.polyfit(s2,PVMEC,11)[::-1]
             C.Pressure.AM = AM 
             C.Pressure.PRES_SCALE = 1.
@@ -420,6 +436,7 @@ class lunaScan(object):
             AT_AUX_F = T
             AT = [0]
         else:
+            print('=== POLYFITTING TEMPERATURE ===')
             AT_AUX_S = [0]
             AT_AUX_F = [0]
             AT = np.polyfit(s2,T,11)[::-1]
@@ -456,6 +473,7 @@ class lunaScan(object):
                 print ('Insert a valid value for LRFP')
                 exit()
         else:
+            print('=== POLYFITTING Q-PROFILE ===')
             if C.Grid.LRFP == 'F':
                 AI = np.polyfit(s2,-1./q,11)[::-1]
             elif C.Grid.LRFP == 'T':
@@ -537,6 +555,7 @@ class lunaScan(object):
             for a specific single sweep within a scan over several parameter
             values by picking 1 specific VMEC input file.
         """
+        print("===== RUNNING VENUS... =====")
         
         #Read equilibrium from VMEC output file and transform it into SFL
         eq = SATIRE2SFL.SATIRE2SFL(woutfile = self.outpath / f'{self.runid}/VMEC/wout/wout_{self.runid}_{idx}.nc', dico_vmec = self.dico_vmec)
@@ -575,7 +594,7 @@ class lunaScan(object):
     	#----------------------------------------------------------------------
         eq.ChangeGrid(stab.grid.S)
         eq.Normalise()
-        eq.BuildInGrid(stab.grid)
+        eq.BuildInGrid(stab.grid) # generates the derivatives of the profiles too
 
         if self['mode_type'] == 'IK':
             eq.Omega = -eq.Omega # KH doesn't run well if this is not set
@@ -589,18 +608,22 @@ class lunaScan(object):
         # Calculate Omegahat, rotation frequency as normalized in 2013 PPCF
         eps_a = self['a']/self['rmaj']
         betahat = 2*eq.mu0*eq.P0/eq.B0**2/eps_a**2
-        Omegahat = np.sqrt(eq.M02*2*eq.mu0*eq.P0)/(eq.B0*eps_a)
-        self.params['omegahat'] = Omegahat
+        # Omegahat0 = np.sqrt(eq.M02*2*eq.mu0*eq.P0)/(eq.B0*eps_a) # normalising to wA0
+        Omegahat0 = np.sqrt(eq.M02*betahat*(np.mean(eq.rho))) # normalising to wA_bar, eq.rho is rho/rho0
+        self.params['omegahat'] = Omegahat0
         # Print equilibrium quantities
         print ('Parameters at the magnetic axis:')
-        print ('   Om_avg   = %.5f'%(self['omega_avg']))
-        print ('   Om_step   = %.5f'%(self['omega_step']))
+        print ('   Om_avg   = %.5f'%(self['omega_avg']) + ', Om_step   = %.5f'%(self['omega_step']))
+        print ('   Om0hat   = %.5f'%(self['omegahat']))
+        print ('   rho_avg   = %.5f'%(self['rho_avg']) + ', rho_step   = %.5f'%(self['rho_step']))
+        print ('   beta_avg   = %.5f'%(self['beta_avg']) + ', beta_step   = %.5f'%(self['beta_step']))
         print ('   M0    = %.5f'%(np.sqrt(eq.M02)))
         print ('   v0/vA = %.5f'%(V0_Va))
         print ('   B0    = %.5f / %.5f [T]'%(eq.B0, self['b0']))
         print ('   R0    = %.5f / %.5f [m]'%(eq.R0, self['rmaj']))
-        print ('   P0    = %.5f / %.5f [Pa]'%(eq.P0, (self['beta_avg']*self['b0']**2/(2.*eq.mu0)))) #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
-        print ('   beta0 = %.5f / %.5f %%'%(2.*eq.mu0*eq.P0/eq.B0**2., self['beta_avg']))
+        print ('   P0    = %.5f / %.5f [Pa]'%(eq.P0, (self['beta0']*self['b0']**2/(2.*eq.mu0)))) #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
+        print ('   beta0 = %.5f / %.5f %%'%(2.*eq.mu0*eq.P0/eq.B0**2., self['beta0']))
+        print ('   betahat   = %.5f'%(betahat))
     	#----------------------------------------------------------------------
         
         if True:
@@ -613,7 +636,7 @@ class lunaScan(object):
     		#------------------------------------------------------------------
             t0 = time.time()
             if EVguess == None:
-                idx_rstep = find_nearest(stab.grid.S, self['rstep'])
+                #idx_rstep = find_nearest(stab.grid.S, self['rstep'])
                 #EV_guess = 1.0E-1 + (1.0j)*abs(n)*eq.Omega[idx_rstep] # want to re-implement this
                 EVguess = self['init_evguess']
                 EVguess = EVguess + (1.0j)*abs(n)*eq.Omega[0]
@@ -628,29 +651,48 @@ class lunaScan(object):
     		#------------------------------------------------------------------
     
             EV = max(stab.vals)
-            
-            # Calculate peakedness
-            # s2 = np.linspace(0.,1.,100) # gridblz
-            # if self.initialisers['Peakedness']:
-            #     if self.params['profile'] in ['rho_t', 'rho_p']:
-            #         #P = beta0*B0**2.*n_*T/(2.*mu0*n0)
-            #         mu0 = 4.*np.pi*1.0E-07
-            #         dens = eq.P*2*mu0/(eq.beta0*eq.B0**2*eq.T) # normalised density
-            #         pkedness = self._peakedness1(s2, dens)                        
-            #     elif self.params['profile']=='PT':
-            #         #pkedness = self._peakedness2(s2, self.Tpoly, xi)
-            #         pkedness = self._peakedness1(s2, eq.T)
-            #     elif self.params['profile']=='rot':
-            #         #pkedness = self._peakedness2(s2, self.rotpoly, xi)
-            #         pkedness = self._peakedness1(s2, eq.Omega)
-            #     else:
-            #         print('PROFILE IS NOT SET TO ONE OF THE ESTABLISHED STEPPED PROFILES.')
-            
-    		
             print ('Most unstable eigenvalue')
             print ('(Gamma/OmegaA) = %.5E + i(%.5E)'%(EV.real,EV.imag))
+            
+            ### Calculate peakedness
+            def xi_anal(r):
+                #xi_r0 = 1
+                r0 = self['rstep']
+                m = RationalM
+                
+                lam = r0**(2*m)
+                
+                xi = []
+                for x in r:
+                    if x < r0:
+                        xi.append((x/r0)**(m - 1))
+                    elif x >= r0:
+                        xi.append((lam/(lam - 1))*((x/r0)**(m-1) - (1/lam)*(r0/x)**(m+1)))
+                return xi
 
-        output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.h5', 'params':self.params.copy(), 'profile':self['profile'], 'shaf_diff0':shaf_diff0}
+            # Extract the initparam
+            initparam = self.scanorder[0]
+            if initparam.endswith('_step'):
+                initparam = initparam.replace('_step','')
+            elif initparam.endswith('_avg'):
+                initparam = initparam.replace('_avg','')
+            elif initparam.endswith('0'):
+                initparam = initparam.replace('0','')
+            elif initparam.endswith('1'):
+                initparam = initparam.replace('1','')
+            scanprofs = {'omega':(np.asarray(eq.Omega*eq.B0/(eq.M02*eq.mu0*eq.P0)**0.5)*Omegahat0, np.asarray(eq.dOmegads*eq.B0/(eq.M02*eq.mu0*eq.P0)**0.5)*Omegahat0), 'rho':(eq.rho*self['rho0'], eq.drhods*self['rho0']), 'beta':(2*eq.P/eps_a**2, 2*eq.dPds/eps_a**2)} # dictionary to convert from inputfile names to those used in SATIRE2SFL
+            # prof[0] correctly matches omegahat0 and rho0
+            # Get profiles
+            s = eq.s
+            prof, dprofds = scanprofs[f'{initparam}']
+            # Load in eigenvectors I guess
+            with h5py.File(f'{self.scan_saveloc}/{self.runid}_0.h5', 'r') as f:
+                xi = f['Variables']['EvaluatedModes'][f'var0_m={RationalM}'][()]
+            p, p2 = self._peakedness(s, y=prof, dyds=dprofds, xi=xi, figidx=idx) # always uses the first eigenfunction for consistency i guess
+            p_anal, _ = self._peakedness(s, y=prof, dyds=dprofds, xi=xi_anal(s), figidx=1)
+            print(f"y0:{prof[0]}")
+
+        output = {'EV':EV, 'v0_va':V0_Va, 'EVguess':EVguess, 'EF_file':f'{self.scan_saveloc}/{self.runid}_{idx}.h5', 'peakedness':p, 'peakedness_avgnorm':p2, 'peakedness_anal':p_anal, 'params':self.params.copy(), 'profile':self['profile'], 'shaf_diff0':shaf_diff0}
         
         return output.copy()
 
@@ -672,8 +714,8 @@ class lunaScan(object):
 
             if self['run_venus']:
                 # Set EV guess and calculate the growth rate
-                if self['ev_guess_type'] == 'last_ev':
-                    if vidx <= 0:
+                if self['ev_guess_type'] == 'last_ev': # need a constraint so that ev_guess<0.9 always because it seems to mess up when ev_guess=1
+                    if vidx <= 1:
                         output1d[f'{scanid}_{vidx}'] = self._runVENUS(EVguess = None, idx = vidx)
                     else:
                         lastrun = output1d[f'{scanid}_{vidx-1}']
@@ -787,14 +829,14 @@ class lunaScan(object):
         fOut = f"{run_saveloc}/{self.runid}.npz"
         
         np.savez(fOut, data = rundata, info = runinfo)
-        # add any new info to the final inputfile
-        inputfile = Path.cwd() / self.inputpath
-        inputfile_nml = f90.read(inputfile)
-        inputfile_nml['info']['runid'] = self.runid
-        inputfile_nml['info']['datetime'] = datetime.now().strftime("%d-%m-%y_%H:%M")
-        with open(run_saveloc / self.inputfile, 'w') as f:
-            f90.write(inputfile_nml, f, force=True)
-        #copy2(inputfile, run_saveloc)
+        # # add any new info to the final inputfile
+        # inputfile = Path.cwd() / self.inputpath
+        # inputfile_nml = f90.read(inputfile)
+        # inputfile_nml['info']['runid'] = self.runid
+        # inputfile_nml['info']['datetime'] = datetime.now().strftime("%d-%m-%y_%H:%M")
+        # with open(run_saveloc / self.inputfile, 'w') as f:
+        #     f90.write(inputfile_nml, f, force=True)
+        # #copy2(inputfile, run_saveloc)
         
         return # can save old runs if same input file (needs same scan parameters) and runid is provided using init_run
 

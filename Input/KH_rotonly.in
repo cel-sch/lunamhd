@@ -4,13 +4,13 @@
    omega_avg = 1.5
    omega_step = 0
    rho_avg = 1
-   rho_step = 0.5
+   rho_step = 0
    beta_avg = 0.005
    beta_step = 0
    rmaj = 10
    a = 1
    n = -1
-   rationalm = 1
+   rationalm = 2
    sidebands = 5
    b0 = 1
    rs = 0
@@ -18,8 +18,8 @@
    delq = 0.1
    nu_q = 8
    nu_n = 6
-   drstep = 0.17
-   init_evguess = 0.5
+   drstep = 0.2
+   init_evguess = 0.3
    grid_res = 100
 /
 
@@ -34,15 +34,16 @@
 /
 
 &info
-runid = ''
-description = 'impurity run'
-datetime = ''
+   runid = 'rot_drstep0.175_2_1'
+   description = ''
+   datetime = '25-08-24_20:53'
 /
 
 &scanparam_0
    paramkey = 'omega_step'
-   nodes = 0, 0.9
+   nodes = 0, 0.6
    nsteps = 10
    vals = ,
-   descending = True
+   descending = .true.
 /
+

@@ -6,7 +6,7 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
-from numpy import sqrt, loadtxt, float64
+from numpy import sqrt, loadtxt, float64, pi, linspace
 from pathlib import Path
 
 from matplotlib.pyplot import subplots, show, ion, axes, tight_layout
@@ -18,21 +18,27 @@ import lunamhd
 default_settings = {'suptitle': None,
                     'title':None,
                     'y_axis_type':'eigenval', # ['eigenval','margin_stab']
-                    'x_axis_type':'initparam',
+                    'y_axis_lims':None,
+                    'x_axis_type':'xstep_norm', # ['initparam', 'peakedness', 'peakedness_anal', 'xstep_norm']
+                    'x_axis_lims':None,
                     'rot_axis_type':'mach0', # ['mach0', 'mach1', 'omega', 'Omega', 'omegahat']
                     'axis_labels':{},
                     'reader_labels':[],
                     'AE_visible':{'gam':True, 'a_gam':False},
-                    'fig_type':'general', # ['paper', 'general', 'paper_notitle']
+                    'fig_type':'paper', # ['paper', 'general', 'paper_notitle']
                     'fontsizes':{'general':{'title':14,'axis':12,'suptitle':20},
                                  'paper':{'title':10,'axis':9,'suptitle':12},
                                  'paper_notitle':{'title':10,'axis':9,'suptitle':12}},
-                    'figsizes':{'general':[8.5,6],
-                                'paper':[4.5,3.5],
+                    'figsizes':{'general':[7.5,6],
+                                'paper':[4.5,4],
                                 'paper_notitle':[4.5,3]},
                     'linestyles':{'plain':'-','asy':'D-','txt':'v--'},
-                    'markersize':2,
-                    'visible':{'suptitle':True, 'legend':True, 'grid':True}}
+                    'own_ls':[],
+                    'markfreq':[],
+                    'markersize':4,
+                    'plotrange':{'pstart':None, 'pstop':None},
+                    'visible':{'suptitle':True, 'legend':True},
+                    'legend_loc':'best'}
 
 class plot_multi(object):
     def __init__(self, readers = [], txts = {}, csvs = {}, scan_specs = {}, settings = {}):
@@ -49,22 +55,26 @@ class plot_multi(object):
                 print(f'ERROR: {key} not found.')
             else:
                 self.settings[key] = settings[key]
-        
-        self.labels = {'omega':'$\hat{Ω}$','beta':'$β_0$','delq':'$\hat{Δq}$','rho':'ρ','sig1':'σ', 'mach':'$\mathcal{M}$',
+
+        self.labels = {'omega':'$\hat{Ω}$','beta':'$β$','delq':'$\hat{Δq}$','rho':'ρ','sig1':'σ', 'mach':'$\mathcal{M}$',
                         'omega0':'$\hat{Ω}_0$','omega1':'$\hat{Ω}_1$','omega_avg':'$\hat{Ω}_{avg}$', 'omega_step':'$\hat{Ω}_{step}$',
                         'rho0':'$ρ_0$','rho1':'$ρ_1$','rho_avg':'$ρ_{avg}$','rho_step':'$ρ_{step}$',
                         'beta0':'$\hat{β}_0$','beta1':'$\hat{β}_1$','beta_avg':'$\hat{β}_{avg}$','beta_step':'$\hat{β}_{step}$',
                         'T_ratio':'$T_0/T_1$',
+                        'rho0_pkd':'$ρ$ peakedness', 'omega0_pkd':'$\hat{Ω}$ peakedness', 'beta0_pkd':'$\hat{β}$ peakedness',
+                        'rho_xstep':'$(ρ_0-ρ_1)/ρ_{avg}$', 'omega_xstep':'$(\hat{Ω}_0-\hat{Ω}_1)/\hat{Ω}_{avg}$', 'beta_xstep':'$(\hat{β}_0-\hat{β}_1)/\hat{β}_{avg}$',
+                        'rho_xstep':'$\\tilde{ρ}_{step}$', 'omega_xstep':'$\\tilde{Ω}_{step}$', 'beta_xstep':'$\\tilde{β}_{step}$',
                         'rmaj':'$R_0$','b0':'$B_0$','drstep':'$Δr_{step}$', 'q0':'$q_0$', 'rationalm':'m',
-                        'eps_a':'$ε_a$','Gamma':'Γ','gam':'$\hat{γ}$','asygam':'$\hat{γ}_{asy}$',
+                        'eps_a':'$ε_a$','Gamma':'Γ','gam':'$\hat{γ}$','asygam':'asymptotic $\hat{γ}$',
                         'y_step':'$(y_0-y_1)/2$', 'y_avg':'$y_{avg}$','y0':'$y_0$', 'y1':'$y_1$',
-                        'EV':'$\hat{ω}','a_EV':'$\hat{ω}_{asy}$','wr':'$\hat{w}_r$','asywr':'$\hat{w}_r _{asy}$'}
-                        # beta is for loading from AEs, is unnormalized here (eps_a normalizations are all removed for comparison to VENUS)
+                        'EV':'$\hat{ω}$','a_EV':'asymptotic $\hat{ω}$','wr':'$\hat{ω}_r$','asywr':'asymptotic $\hat{ω}_r$'}
 
         #self.outpath = Path('/users/cs2427/scratch/lunamhd-data/') # for running on viking
-        self.outpath = Path(f'/home/csch/VENUS-linux/lunamhd/Output/') # for running locally
+        self.outpath = Path(f'/home/csch/VENUS-linux/lunamhd/Output/KH') # for running locally
                 
+        self.initparams = {}
         self.xkeys = {}
+        self.xkey0s = {}
         self.ykeys = {}
         self.scan_specs = scan_specs
 
@@ -72,6 +82,8 @@ class plot_multi(object):
         self.scankeys = {}
         self.spar_lists = {}
         # self.txtdata = {} # for more complex txt file loading
+
+        self.wA_avgNorm = True # convert VENUS outputs to wA_avg normalisation or not
 
         self.open_plot()
                 
@@ -109,11 +121,15 @@ class plot_multi(object):
     def save_plot(self, plotfilename, plotsaveloc = None):
         if plotsaveloc is None:
             plotsaveloc = self.outpath / self.readers[0].info['runid']
-        self.fig.savefig(plotsaveloc / f'{plotfilename}')
+        self.fig.savefig(Path(plotsaveloc) / f'{plotfilename}')
         
     def open_plot(self):
         # Creates figure and axes
         self.fig, self.ax = subplots(figsize=(self['figsizes'][f"{self['fig_type']}"][0],self['figsizes'][f"{self['fig_type']}"][1]))
+        if self['x_axis_lims']:
+            self.ax.set_xlim(self['x_axis_lims'][0],self['x_axis_lims'][1])
+        if self['y_axis_lims']:
+            self.ax.set_ylim(self['y_axis_lims'][0],self['y_axis_lims'][1])
         self.fig.set_tight_layout(True)
              
         self.scans = {}
@@ -129,8 +145,8 @@ class plot_multi(object):
         else:
             self.fig.suptitle(self['suptitle'],fontsize=self['fontsizes'][f"{self['fig_type']}"]['suptitle'],visible=self['visible']['suptitle'])
 
-        if self['visible']['grid']:
-            self.ax.grid()
+        # if self['visible']['grid']:
+        self.ax.grid()
         
         ion()
         show()
@@ -183,50 +199,65 @@ class plot_multi(object):
                 scans.remove(scan)
         return scans
     
-    def _make_shared_fixedparams(self):
+    def _make_shared_fixedparams(self): 
         shared_fixedparams = {}
         for reader in self.readers:
             for key, val in reader.info['fixedparams'].items():
-                if self.readers[0].info['fixedparams'][key] == val:
+                if key in self.readers[0].info['fixedparams'].keys() and self.readers[0].info['fixedparams'][key] == val:
                     shared_fixedparams[key] = val
+                elif key in self.readers[0].info['fixedparams'].keys():
+                    try:
+                        del shared_fixedparams[key]
+                    except:
+                        pass
         return shared_fixedparams
 
-    def _load_run_info(self):
+    def _load_run_info(self): 
         shared_fixedparams = self._make_shared_fixedparams()
         info = ''
         for key, val in shared_fixedparams.items():
             if type(val) in ['int', float, float64]:
-                info += f"{self._getlabel(self.readers[0], key)} = {val:.2f} "
+                info += f"{self._getlabel(self.readers[0], key)} = {val:.4f} "
             else:
                 info += f"{self._getlabel(self.readers[0], key)} = {val} "
         info = "\n".join(wrap(info, 60))
         return info
         
     def _load_x_axis(self, reader, axis_type, rot_axis_type):
-        if axis_type not in ['initparam']:
-            print("ERROR: axis_type not found, valid types ['initparam']")
+        if axis_type not in ['initparam', 'peakedness', 'peakedness_anal','xstep_norm']:
+            print("ERROR: axis_type not found, valid types ['initparam', 'peakedness', 'peakedness_anal', 'xstep_norm']")
             return
-        if axis_type == 'initparam':
-            initparam = deepcopy(reader.info['scanorder'][0])
-            if initparam in ['mach', 'Omega', 'omega']:
-                xkey = self._load_rot_axis(reader, rot_axis_type)
-            else:
-                xkey = initparam
-            
-            # need to add a switch which checks whether the output file has a y0 or not (only added omega0 to luna recently)
-            # if xkey.endswith('_avg'): # y0 doesnt get saved for lunamhd
-            #     xkey = xkey.replace('_avg','0')
-            # elif xkey.endswith('_step'):
-            #     xkey = xkey.replace('_step','0')
-            self.xkeys[f'{reader}'] = xkey
-            self.scankeys[f'{reader}'] = initparam
-            self.spar_lists[f'{reader}'] = reader.info['scanparams'][initparam]
+
+        initparam = deepcopy(reader.info['scanorder'][0]) 
+        self.initparams[f'{reader}'] = initparam
+        if initparam in ['mach', 'Omega', 'omega']:
+            xkey = self._load_rot_axis(reader, rot_axis_type)
+        else:
+            xkey = initparam
+            xkey0 = initparam
+        # need to add a switch which checks whether the output file has a y0 or not (only added omega0 to luna recently)
+        if xkey.endswith('_avg'):
+            xkey = xkey.replace('_avg','')
+        elif xkey.endswith('_step'):
+            xkey = xkey.replace('_step','')
+
+        if axis_type in ['peakedness', 'peakedness_anal']:
+            xkey = f'{xkey}_pkd'
+
+        self.xkeys[f'{reader}'] = xkey
+        self.xkey0s[f'{reader}'] = xkey0
+        self.scankeys[f'{reader}'] = initparam
+        self.spar_lists[f'{reader}'] = reader.info['scanparams'][initparam]
 
         if 'x' in self['axis_labels'].keys():
             self._x_ax_label = self['axis_labels']['x']
         else:
             self._x_ax_label = self._getlabel(reader, xkey) # for now: just take the xlabel from the last reader to read in, probably not a good system
             # potentially more right to load in the xlabel from the first reader
+            if axis_type == 'xstep_norm':
+                self._x_ax_label = self._getlabel(reader, f'{xkey}_xstep')
+            elif axis_type == 'initparam':
+                self._x_ax_label = self._getlabel(reader, xkey0)
         
     def _load_y_axis(self, reader, axis_type):
         if axis_type not in ['eigenval']:
@@ -249,10 +280,13 @@ class plot_multi(object):
             print("ERROR: rot_axis_type not found, valid types: ['mach0', 'mach1', 'omega', 'Omega']")
             return
         if axis_type in ['omega', 'Omega']:
-            if type(reader) == lunamhd.lunaReader.lunaRead:
-                rotkey = 'omegahat'
-            elif type(reader) == AEmhd.Reader.AEread: 
-                rotkey = 'omega' 
+            if self['x_axis_type'] in ['peakedness', 'peakedness_anal']:
+                rotkey = f'{self.xkey}_pkd'
+            else:
+                if type(reader) == lunamhd.lunaReader.lunaRead:
+                    rotkey = 'omegahat'
+                elif type(reader) == AEmhd.Reader.AEread: 
+                    rotkey = 'omega' 
         elif axis_type in ['mach0']:
             if type(reader) == AEmhd.Reader.AEread: 
                 rotkey = 'mach0'
@@ -276,6 +310,46 @@ class plot_multi(object):
     #     self.txtdata[f'{txtfname}']['lstyle'] = '-'
     #     return x, y
 
+    def load_stepavg(self, reader, prof, scan = {}):
+        mu0 = 4.*pi*1.0E-07
+        steps = []
+        avgs = []
+        for idx in range(len(self.spar_lists[f'{reader}'])):
+            for key, vals in reader.get_profiles_list(scanparam = self.initparams[f'{reader}'], spar_list = self.spar_lists[f'{reader}'][idx], paramSpecs = scan, _returnBoth = False).items():
+                EF_file = key
+                prof_dict = vals
+            EF_file = EF_file.split('/')[-1]
+
+            B0 = prof_dict['B0']
+            P0 = prof_dict['P0']
+            R0 = prof_dict['R0']
+            M02 = prof_dict['M02']
+
+            if prof in ['omega', 'Omega']:
+                Omega = prof_dict['omega']
+                Omega = Omega*B0/(M02*mu0*P0)
+
+                step = (Omega[0] - Omega[-3])/2
+                avg = (Omega[0] + Omega[-3])/2
+            elif prof == 'rho':
+                rho = prof_dict['rho']
+                rho0 = reader.get_1d_list(scanparam = self.initparams[f'{reader}'], variable = 'rho0', spar_list = self.spar_lists[f'{reader}'][idx], paramSpecs = scan, _returnBoth = False)
+                rho = rho*rho0
+
+                step = (rho[0] - rho[-3])/2
+                avg = (rho[0] + rho[-3])/2
+            elif prof == 'beta':
+                P = prof_dict['p']
+                eps_a = 1/R0
+                P = 2*P/eps_a**2
+
+                step = (P[0] - P[-3])/2
+                avg = (P[0] + P[-3])/2
+
+            steps.append(step)
+            avgs.append(avg)
+        return steps, avgs
+
     def _load_data(self, reader, scan = {}):
         if len(self['reader_labels']) > 0:
             if len(self['reader_labels']) != len(self.readers):
@@ -293,36 +367,50 @@ class plot_multi(object):
         self.lstyle = self['linestyles']['plain']
         self.asy_lstyle = self['linestyles']['asy']
 
-        if type(reader) == lunamhd.lunaReader.lunaRead:
-            if self.xkeys[f'{reader}'] == self.scankeys[f'{reader}']: # there is definitely a way to make this into a function
-                x_vals, y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], variable=self.ykeys[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan) # need to check what happens if paramSpecs = None
+        # load x data
+        if self['x_axis_type'] == 'peakedness':
+            x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], 'peakedness', spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+        elif self['x_axis_type'] == 'peakedness_anal':
+            x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], 'peakedness_anal', spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+        elif self['x_axis_type'] == 'xstep_norm':
+            if type(reader) == AEmhd.Reader.AEread:
+                x_step = reader.get_1d_list(self.initparams[f'{reader}'], f"{self.xkeys[f'{reader}']}_step", spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+                x_avg = reader.get_1d_list(self.initparams[f'{reader}'], f"{self.xkeys[f'{reader}']}_avg", spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False) # i think this returns an array even if x_avg is constant?
+            elif type(reader) == lunamhd.lunaReader.lunaRead:
+                x_step = self.load_stepavg(reader, f"{self.xkeys[f'{reader}']}", scan = scan)[0]
+                x_avg = self.load_stepavg(reader, f"{self.xkeys[f'{reader}']}", scan = scan)[1]
+            x_vals = [i/j for i, j in zip(x_step, x_avg)]
+        else:
+            if self.xkey0s[f'{reader}'] == self.scankeys[f'{reader}']:
+                x_vals = self.spar_lists[f'{reader}']
             else:
                 x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-                y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-            gam_vals = [i.real for i in y_vals]
+
+        # load y data
+        if type(reader) == lunamhd.lunaReader.lunaRead:
+            y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+            # converting from gamma/wA0 to gamma/wAavg as used in analytic work
+            if self.wA_avgNorm:
+                rhosteps, rhoavgs = self.load_stepavg(reader, 'rho', scan = scan) # there is a rhostep and rhoavg value associated with every gam value
+                conversion = [sqrt(j/(i+j)) for i,j in zip(rhosteps, rhoavgs)]
+                y_vals = [i*j for i,j in zip(y_vals, conversion)]
+
+            gam_vals = [i.real*10 for i in y_vals]
             a_gam_vals = None
-            # Change x_vals from mach to omegahat if needed, probably broken but i am not fixing this rn
-            if self.scankeys[f'{reader}'] == 'mach' and self['rot_axis_type'] in ['omega', 'Omega']: 
+            
+            if self.scankeys[f'{reader}'] in ['beta0', 'beta1', 'beta_avg', 'beta_step'] and self['x_axis_type'] != 'xstep_norm':
+                x_vals = [i*100 for i in x_vals]
+            elif self.scankeys[f'{reader}'] == 'mach' and self['rot_axis_type'] in ['omega', 'Omega']: # Change x_vals from mach to omegahat if needed, probably broken but i am not fixing this rn
                 _, x_vals = reader.get_1d_list(scanparam=self.scankeys[f'{reader}'], variable=self.xkeys[f'{reader}'], paramSpecs=scan)
             
-        elif type(reader) == AEmhd.Reader.AEread:
+        elif type(reader) == AEmhd.Reader.AEread:         
             if reader.info['scantype'] == 'full':
-                if self.xkeys[f'{reader}'] == self.scankeys[f'{reader}']:
-                    x_vals, y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], variable=self.ykeys[f'{reader}'][0], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan) # need to check what happens if paramSpecs = None
-                    asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-                else:
-                    x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-                    y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][0], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-                    asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-                gam_vals = [i.imag for i in y_vals]
-                a_gam_vals = [i.imag for i in asy_vals]
+                y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][0], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+                asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+                gam_vals = [i.imag for i in y_vals] # need to change for general eps_a
             elif reader.info['scantype'] == 'asy':
-                if self.xkeys[f'{reader}'] == self.scankeys[f'{reader}']:
-                    x_vals, asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], variable=self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan) # need to check what happens if paramSpecs = None
-                else:
-                    x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-                    asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-                a_gam_vals = [i.imag for i in asy_vals]
+                asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+            a_gam_vals = [i.imag for i in asy_vals] # need to change for general eps_a
             # Change x_vals from omega to mach0 or mach1, pretty sure this is broken atm because of new omega options
             if self.scankeys[f'{reader}'] == 'omega' and self['rot_axis_type'] in ['mach0', 'mach1']: 
                 _, x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], paramSpecs = scan)
@@ -332,18 +420,40 @@ class plot_multi(object):
 
         return x_vals, gam_vals, a_gam_vals
 
-    def plot_vals(self, reader = None, txtfname = None, csvfname = None, scan = {}):
+    def plot_vals(self, reader = None, readeridx = 0, txtfname = None, csvfname = None, scan = {}):
+        if len(self['own_ls']) > 0:
+            lstyle = self['own_ls'][readeridx]
+        else:
+            lstyle = '-'
+
+        if len(self['markfreq']) > 0:
+            markfreq = self['markfreq'][readeridx]
+        else:
+            markfreq=1
+
+        # truncate plots if needed
+        if self['plotrange']['pstart'] is None:
+            pstart = 0
+        else:
+            pstart = self['plotrange']['pstart']
+        if self['plotrange']['pstop'] is None:
+            pstop = len(self._load_data(reader = reader, scan = scan)[0])
+        else:
+            pstop = self['plotrange']['pstop']
+
         if reader:
             if type(reader) == lunamhd.lunaReader.lunaRead:
                 x_vals, gam_vals, _ = self._load_data(reader = reader, scan = scan)
-                self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
+                # if self.scanlabel == 'VENUS-MHD (2,1)':
+                #     self.ax.plot(x_vals[:-1], gam_vals[:-1], lstyle, label=f'{self.scanlabel}', markersize=self['markersize'], markevery=markfreq)
+                self.ax.plot(x_vals[pstart:pstop], gam_vals[pstart:pstop], lstyle, label=f'{self.scanlabel}', markersize=self['markersize'], markevery=markfreq)
             elif type(reader) == AEmhd.Reader.AEread:
                 if self['AE_visible']['gam']:
                     x_vals, gam_vals, _ = self._load_data(reader = reader, scan = scan)
-                    self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel} DE', markersize=self['markersize'])
+                    self.ax.plot(x_vals[pstart:pstop], gam_vals[pstart:pstop], lstyle, label=f'{self.scanlabel}', markersize=self['markersize'], markevery=markfreq)
                 if self['AE_visible']['a_gam']:
                     x_vals, _, a_gam_vals = self._load_data(reader = reader, scan = scan)
-                    self.ax.plot(x_vals, a_gam_vals, self.asy_lstyle, label=f'{self.scanlabel} AE', markersize=self['markersize'])
+                    self.ax.plot(x_vals[pstart:pstop], a_gam_vals[pstart:pstop], lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
         elif txtfname:
             x_vals, y_vals = loadtxt(self.txts[f'{txtfname}'], unpack = True)
             self.ax.plot(x_vals, y_vals, '--v', label = txtfname, markersize=self['markersize'])
@@ -354,13 +464,13 @@ class plot_multi(object):
 
         
     def draw_fig(self):
-        for reader in self.readers:
+        for idx, reader in enumerate(self.readers):
             scans = self.scans[f'{reader}']
             if scans:
                 for scan in scans:
-                    self.plot_vals(reader = reader, scan = scan)
+                    self.plot_vals(reader = reader, readeridx = idx, scan = scan)
             else:
-                self.plot_vals(reader = reader)
+                self.plot_vals(reader = reader, readeridx = idx)
 
         for txtfname in self.txts.keys():
             self.plot_vals(txtfname = txtfname)
@@ -371,7 +481,7 @@ class plot_multi(object):
         self.ax.set_ylabel(self._y_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis'])
         self.ax.set_xlabel(self._x_ax_label,fontsize=self['fontsizes'][f"{self['fig_type']}"]['axis']) 
         if self.scanlabel:
-            self.ax.legend()
+            self.ax.legend(loc=self['legend_loc'])
             self.ax.legend_.set_visible(self['visible']['legend'])
         
         self.fig.canvas.draw_idle()
