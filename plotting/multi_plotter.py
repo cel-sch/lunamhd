@@ -82,7 +82,6 @@ class plot_multi(object):
 
         self.scankeys = {}
         self.spar_lists = {}
-        # self.txtdata = {} # for more complex txt file loading
 
         self.wA_avgNorm = True # convert VENUS outputs to wA_avg normalisation or not
 
@@ -305,16 +304,6 @@ class plot_multi(object):
                 print("NOTE: no way of retrieving mach1 for VENUS-MHD (yet?). mach0 being plotted.")
         return rotkey
 
-    # def _load_txt(self, txtfile):
-    #     x, y = loadtxt(txtfile, unpack = True)
-        
-    #     self.txtdata[f'{txtfname}'] = {}
-    #     self.txtdata[f'{txtfname}']['xdata'] = x
-    #     self.txtdata[f'{txtfname}']['ydata'] = y
-    #     self.txtdata[f'{txtfname}']['label'] = txtfname
-    #     self.txtdata[f'{txtfname}']['lstyle'] = '-'
-    #     return x, y
-
     def load_stepavg(self, reader, prof, scan = {}):
         mu0 = 4.*pi*1.0E-07
         steps = []
@@ -403,8 +392,11 @@ class plot_multi(object):
                 conversion = [sqrt(j/(i+j)) for i,j in zip(rhosteps, rhoavgs)]
                 y_vals = [i*j for i,j in zip(y_vals, conversion)]
 
-            gam_vals = [i.real*10 for i in y_vals] # for a fixed aspect ratio of 10
-            a_gam_vals = None
+            if self.y_axis_type == 'gam':
+                y_vals = [i.real*10 for i in y_vals] # for a fixed aspect ratio of 10
+            elif self.y_axis_type == 'wr':
+                y_vals = [i.imag*10 for i in y_vals] # for a fixed aspect ratio of 10
+            a_y_vals = None
 
             # elif self.scankeys[f'{reader}'] == 'mach' and self['rot_axis_type'] in ['omega', 'Omega']: # Change x_vals from mach to omegahat if needed, probably broken but i am not fixing this rn
             #     _, x_vals = reader.get_1d_list(scanparam=self.scankeys[f'{reader}'], variable=self.xkeys[f'{reader}'], paramSpecs=scan)
@@ -413,23 +405,29 @@ class plot_multi(object):
             if reader.info['scantype'] == 'full':
                 y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][0], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
                 asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-                
-                gam_vals = [i.imag for i in y_vals] # need to change for general eps_a
+
+                if self.y_axis_type == 'gam': # need to change for general eps_a
+                    y_vals = [i.imag for i in y_vals] 
+                    a_y_vals = [i.imag for i in asy_vals]
+                elif self.y_axis_type == 'wr':
+                    y_vals = [i.real for i in y_vals]
+                    a_y_vals = [i.real for i in asy_vals]
+
             elif reader.info['scantype'] == 'asy':
                 asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
 
-            a_gam_vals = [i.imag for i in asy_vals] # need to change for general eps_a
+                if self.y_axis_type == 'gam': # need to change for general eps_a
+                    a_y_vals = [i.imag for i in asy_vals]
+                elif self.y_axis_type == 'wr':
+                    a_y_vals = [i.real for i in asy_vals]
 
             # Change x_vals from omega to mach0 or mach1, pretty sure this is broken atm because of new omega options
             # if self.scankeys[f'{reader}'] == 'omega' and self['rot_axis_type'] in ['mach0', 'mach1']: 
             #     _, x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], paramSpecs = scan)
 
-        # for txtfname, txtf in self.txts:
-        #     self._load_txt(txtfile = txtf)
+        return x_vals, y_vals, a_y_vals
 
-        return x_vals, gam_vals, a_gam_vals
-
-    def plot_vals(self, reader = None, readeridx = 0, txtfname = None, csvfname = None, scan = {}):
+    def plot_vals(self, reader = None, readeridx = 0, csvfname = None, scan = {}):
         if len(self['own_ls']) > 0:
             lstyle = self['own_ls'][readeridx]
         else:
@@ -463,9 +461,6 @@ class plot_multi(object):
                 if self['AE_visible']['a_gam']:
                     x_vals, _, a_gam_vals = self._load_data(reader = reader, scan = scan)
                     self.ax.plot(x_vals[pstart:pstop], a_gam_vals[pstart:pstop], lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
-        elif txtfname:
-            x_vals, y_vals = loadtxt(self.txts[f'{txtfname}'], unpack = True)
-            self.ax.plot(x_vals, y_vals, '--v', label = txtfname, markersize=self['markersize'])
         elif csvfname:
             x_vals, y_vals = loadtxt(self.csvs[f'{csvfname}'], delimiter = ',', unpack = True, skiprows=1)
             y_vals = [i*0.1 for i in y_vals] # need a more general way to renormalize this
@@ -480,9 +475,6 @@ class plot_multi(object):
                     self.plot_vals(reader = reader, readeridx = idx, scan = scan)
             else:
                 self.plot_vals(reader = reader, readeridx = idx)
-
-        for txtfname in self.txts.keys():
-            self.plot_vals(txtfname = txtfname)
 
         for csvfname in self.csvs.keys():
             self.plot_vals(csvfname = csvfname)

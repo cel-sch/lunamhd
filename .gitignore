@@ -7,7 +7,7 @@ VMEC/*
 Output/*
 
 # Ignore results (figures)
-Results/*
+*.png
 
 # Ignore random other folders
 AEs/*
