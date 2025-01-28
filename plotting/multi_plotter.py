@@ -17,13 +17,14 @@ import lunamhd
 
 default_settings = {'suptitle': None,
                     'title':None,
-                    'y_axis_type':'eigenval', # ['eigenval','margin_stab']
+                    'y_axis_type':'gam', # ['gam','wr'] # decide whether plotting real frequency or growth rate
                     'y_axis_lims':None,
                     'x_axis_type':'xstep_norm', # ['initparam', 'peakedness', 'peakedness_anal', 'xstep_norm']
                     'x_axis_lims':None,
                     'rot_axis_type':'mach0', # ['mach0', 'mach1', 'omega', 'Omega', 'omegahat']
                     'axis_labels':{},
                     'reader_labels':[],
+                    # 'EV_visible':{'gams':True, 'wrs':False}
                     'AE_visible':{'gam':True, 'a_gam':False},
                     'fig_type':'paper', # ['paper', 'general', 'paper_notitle']
                     'fontsizes':{'general':{'title':14,'axis':12,'suptitle':20},
@@ -260,20 +261,24 @@ class plot_multi(object):
                 self._x_ax_label = self._getlabel(reader, xkey0)
         
     def _load_y_axis(self, reader, axis_type):
-        if axis_type not in ['eigenval']:
-            print("ERROR: axis_type not found, valid types: ['eigenval']")
+        if axis_type not in ['gam', 'wr']:
+            print("ERROR: axis_type not found, valid types: ['gam', 'wr']. Determines whether growth rate or real frequency is plotted.")
             return
-        if axis_type == 'eigenval':
-            if type(reader) == AEmhd.Reader.AEread:
-                self.ykeys[f'{reader}'] = ['EV', 'a_EV']
-            elif type(reader) == lunamhd.lunaReader.lunaRead:
-                self.ykeys[f'{reader}'] = 'EV'
-            self._y_ax_label = self._getlabel(reader, 'gam')
+        
+        # load eigenvalue only for lunamhd, DE and AE eigenvalues for AEmhd
+        if type(reader) == AEmhd.Reader.AEread:
+            self.ykeys[f'{reader}'] = ['EV', 'a_EV']
+        elif type(reader) == lunamhd.lunaReader.lunaRead:
+            self.ykeys[f'{reader}'] = 'EV'
 
+        # load axis labels 
+        def _load_y_axis_label(axis_type):
+            self._y_ax_label = self._getlabel(reader, axis_type)
             if 'y' in self['axis_labels'].keys():
                 self._y_ax_label = self['axis_labels']['y']
             else:
-                self._y_ax_label = self._getlabel(reader, 'gam')
+                self._y_ax_label = self._getlabel(reader, axis_type)
+        _load_y_axis_label(axis_type)
 
     def _load_rot_axis(self, reader, axis_type):
         if axis_type not in ['mach0', 'mach1', 'omega', 'Omega']:
@@ -384,36 +389,40 @@ class plot_multi(object):
             if self.xkey0s[f'{reader}'] == self.scankeys[f'{reader}']:
                 x_vals = self.spar_lists[f'{reader}']
             else:
-                x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+                x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkey0s[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+        if type(reader) == lunamhd.lunaReader.lunaRead:
+            if self.scankeys[f'{reader}'] in ['beta0', 'beta1', 'beta_avg', 'beta_step'] and self['x_axis_type'] != 'xstep_norm': # renormalize beta to match analytic runs where we have beta/eps^2
+                    x_vals = [i*100 for i in x_vals]
 
         # load y data
         if type(reader) == lunamhd.lunaReader.lunaRead:
             y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
-            # converting from gamma/wA0 to gamma/wAavg as used in analytic work
+            # converting normalization from gamma/wA0 to gamma/wAavg as used in analytic work
             if self.wA_avgNorm:
                 rhosteps, rhoavgs = self.load_stepavg(reader, 'rho', scan = scan) # there is a rhostep and rhoavg value associated with every gam value
                 conversion = [sqrt(j/(i+j)) for i,j in zip(rhosteps, rhoavgs)]
                 y_vals = [i*j for i,j in zip(y_vals, conversion)]
 
-            gam_vals = [i.real*10 for i in y_vals]
+            gam_vals = [i.real*10 for i in y_vals] # for a fixed aspect ratio of 10
             a_gam_vals = None
-            
-            if self.scankeys[f'{reader}'] in ['beta0', 'beta1', 'beta_avg', 'beta_step'] and self['x_axis_type'] != 'xstep_norm':
-                x_vals = [i*100 for i in x_vals]
-            elif self.scankeys[f'{reader}'] == 'mach' and self['rot_axis_type'] in ['omega', 'Omega']: # Change x_vals from mach to omegahat if needed, probably broken but i am not fixing this rn
-                _, x_vals = reader.get_1d_list(scanparam=self.scankeys[f'{reader}'], variable=self.xkeys[f'{reader}'], paramSpecs=scan)
+
+            # elif self.scankeys[f'{reader}'] == 'mach' and self['rot_axis_type'] in ['omega', 'Omega']: # Change x_vals from mach to omegahat if needed, probably broken but i am not fixing this rn
+            #     _, x_vals = reader.get_1d_list(scanparam=self.scankeys[f'{reader}'], variable=self.xkeys[f'{reader}'], paramSpecs=scan)
             
         elif type(reader) == AEmhd.Reader.AEread:         
             if reader.info['scantype'] == 'full':
                 y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][0], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
                 asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+                
                 gam_vals = [i.imag for i in y_vals] # need to change for general eps_a
             elif reader.info['scantype'] == 'asy':
                 asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
+
             a_gam_vals = [i.imag for i in asy_vals] # need to change for general eps_a
+
             # Change x_vals from omega to mach0 or mach1, pretty sure this is broken atm because of new omega options
-            if self.scankeys[f'{reader}'] == 'omega' and self['rot_axis_type'] in ['mach0', 'mach1']: 
-                _, x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], paramSpecs = scan)
+            # if self.scankeys[f'{reader}'] == 'omega' and self['rot_axis_type'] in ['mach0', 'mach1']: 
+            #     _, x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.xkeys[f'{reader}'], paramSpecs = scan)
 
         # for txtfname, txtf in self.txts:
         #     self._load_txt(txtfile = txtf)

@@ -256,7 +256,7 @@ class plot_growth(object):
             gam_vals = [i.real for i in y_vals]
             self.ax.plot(x_vals, gam_vals, self.lstyle, label=f'{self.scanlabel}', markersize=self['markersize'])
             if self['EV_guess']:
-                _, gam_guess_vals = self.reader.get_1d_list(self.xkey, 'EVguess', paramSpecs = scan)
+                _, gam_guess_vals = self.reader.get_1d_list(self.initparam, 'EVguess', paramSpecs = scan)
                 gam_guess_vals = [i.real for i in gam_guess_vals]
                 self.ax.plot(x_vals, gam_guess_vals, self.lstyle, label=f'{self.scanlabel} guess', markersize=self['markersize'])
         if self['EV_visible']['wr']:

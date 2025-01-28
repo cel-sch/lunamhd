@@ -9,13 +9,13 @@ cwd = os.getcwd()
 ### VENUS vs DE section, impurity plot
 read = lunaRead('imp_omstep_lowbeta2')
 read2 = AEread('imp_omstep_beta00.5')
-mp = read.multi_plot(readers = [read2], settings={'x_axis_type':'xstep_norm','rot_axis_type':'omega', 'fig_type':'paper', 'reader_labels':['VENUS-MHD', 'step model'], 'own_ls':['cD-','m-'], 'markersize':markersize})
+mp = read.multi_plot(readers = [read2], settings={'EV_visible':{'gam':False, 'wr':True},'x_axis_type':'xstep_norm','rot_axis_type':'omega', 'fig_type':'paper', 'reader_labels':['VENUS-MHD', 'step model'], 'own_ls':['cD-','m-'], 'markersize':markersize})
 mp.save_plot('imp_omstep_VENUSvDE.png', cwd)
 
 ### VENUS vs DE section, all stepped plot
 read = lunaRead('as_omstep_lowbeta2')
 read2 = AEread('as_omstep_beta00.5')
-mp = read.multi_plot(readers = [read2], settings={'x_axis_type':'xstep_norm','rot_axis_type':'omega', 'fig_type':'paper', 'reader_labels':['VENUS-MHD', 'step model'], 'own_ls':['cD-','m-'], 'markersize':markersize, 'plotrange':{'pstart':1,'pstop':None}})
+mp = read.multi_plot(readers = [read2], settings={'EV_visible':{'gam':False, 'wr':True},'x_axis_type':'xstep_norm','rot_axis_type':'omega', 'fig_type':'paper', 'reader_labels':['VENUS-MHD', 'step model'], 'own_ls':['cD-','m-'], 'markersize':markersize, 'plotrange':{'pstart':1,'pstop':None}})
 mp.save_plot('as_omstep_VENUSvDE.png', cwd)
 
 ### param deps section, temp vs omega
@@ -24,7 +24,7 @@ read = lunaRead('tvo_rotonly_2_1_drstep0.17_highres')
 read2 = lunaRead('tvo_rhostep0_2_1_drstep0.17_highres')
 read3 = AEread('tvo_rotonly_2_1')
 read4 = AEread('tvo_rhostep0_2_1')
-mp = read.multi_plot(readers = [read2, read3, read4], settings={'x_axis_type':'xstep_norm','rot_axis_type':'omega', 'x_axis_lims':[0,0.55], 'y_axis_lims':[-0.5,9.5], 'fig_type':'paper', 'reader_labels':['VENUS $\hat{Ω}$ step only', 'VENUS $\hat{Ω}, T/T_0, \hat{β}$ step', 'analytic $\hat{Ω}$ step only', 'analytic $\hat{Ω}, T/T_0, \hat{β}$ step'], 'axis_labels':{}, 'own_ls':['cD-','mD-', 'c-', 'm-'], 'markersize':markersize, 'markfreq':[1,1,1,2]})
+mp = read.multi_plot(readers = [read2, read3, read4], settings={'EV_visible':{'gam':False, 'wr':True},'x_axis_type':'xstep_norm','rot_axis_type':'omega', 'x_axis_lims':[0,0.55], 'y_axis_lims':[-0.5,9.5], 'fig_type':'paper', 'reader_labels':['VENUS $\hat{Ω}$ step only', 'VENUS $\hat{Ω}, T/T_0, \hat{β}$ step', 'analytic $\hat{Ω}$ step only', 'analytic $\hat{Ω}, T/T_0, \hat{β}$ step'], 'axis_labels':{}, 'own_ls':['cD-','mD-', 'c-', 'm-'], 'markersize':markersize, 'markfreq':[1,1,1,2]})
 mp.ax.plot(0.1,0,'bD')
 mp.save_plot('tvo_VENUS.png', cwd)
 

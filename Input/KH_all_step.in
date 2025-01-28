@@ -5,13 +5,13 @@
    omega_step = 0.5
    rho_avg = 1
    rho_step = 0.5
-   beta_avg = 0.0075
-   beta_step = 0.001
+   beta_avg = 0.003
+   beta_step = 0.002
    rmaj = 10
    a = 1
    n = -1
-   rationalm = 2
-   sidebands = 5
+   rationalm = 1
+   sidebands = 10
    b0 = 1
    rs = 0
    qs = 2
@@ -19,7 +19,7 @@
    nu_q = 8
    nu_n = 6
    drstep = 0.15
-   init_evguess = 0.8
+   init_evguess = 0.9
    grid_res = 100
 /
 
@@ -34,17 +34,16 @@
 /
 
 &info
-   runid = 'as_betastep_2_12'
+   runid = 'as_omstep_lowbeta2'
    description = ''
-   datetime = '27-09-24_02:04'
+   datetime = '25-08-24_16:24'
 /
 
 &scanparam_0
-   paramkey = 'beta_step'
-   nodes = 0, 0.006, 0.0074
-   nsteps = 10, 10
+   paramkey = 'omega_step'
+   nodes = 0, 1.2
+   nsteps = 12
    vals = ,
-   descending = .false.
+   descending = .true.
 /
-
 
