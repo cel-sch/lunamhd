@@ -392,9 +392,9 @@ class plot_multi(object):
                 conversion = [sqrt(j/(i+j)) for i,j in zip(rhosteps, rhoavgs)]
                 y_vals = [i*j for i,j in zip(y_vals, conversion)]
 
-            if self.y_axis_type == 'gam':
+            if self['y_axis_type'] == 'gam':
                 y_vals = [i.real*10 for i in y_vals] # for a fixed aspect ratio of 10
-            elif self.y_axis_type == 'wr':
+            elif self['y_axis_type'] == 'wr':
                 y_vals = [i.imag*10 for i in y_vals] # for a fixed aspect ratio of 10
             a_y_vals = None
 
@@ -406,19 +406,19 @@ class plot_multi(object):
                 y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][0], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
                 asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
 
-                if self.y_axis_type == 'gam': # need to change for general eps_a
+                if self['y_axis_type'] == 'gam': # need to change for general eps_a
                     y_vals = [i.imag for i in y_vals] 
                     a_y_vals = [i.imag for i in asy_vals]
-                elif self.y_axis_type == 'wr':
+                elif self['y_axis_type'] == 'wr':
                     y_vals = [i.real for i in y_vals]
                     a_y_vals = [i.real for i in asy_vals]
 
             elif reader.info['scantype'] == 'asy':
                 asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
 
-                if self.y_axis_type == 'gam': # need to change for general eps_a
+                if self['y_axis_type'] == 'gam': # need to change for general eps_a
                     a_y_vals = [i.imag for i in asy_vals]
-                elif self.y_axis_type == 'wr':
+                elif self['y_axis_type'] == 'wr':
                     a_y_vals = [i.real for i in asy_vals]
 
             # Change x_vals from omega to mach0 or mach1, pretty sure this is broken atm because of new omega options
