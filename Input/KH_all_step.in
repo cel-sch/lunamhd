@@ -4,14 +4,14 @@
    omega_avg = 1.5
    omega_step = 0.5
    rho_avg = 1
-   rho_step = 0.5
-   beta_avg = 0.003
+   rho_step = 0
+   beta_avg = 0.005
    beta_step = 0.002
    rmaj = 10
    a = 1
    n = -1
-   rationalm = 1
-   sidebands = 10
+   rationalm = 2
+   sidebands = 5
    b0 = 1
    rs = 0
    qs = 2
@@ -19,7 +19,7 @@
    nu_q = 8
    nu_n = 6
    drstep = 0.15
-   init_evguess = 0.9
+   init_evguess = 1.8
    grid_res = 100
 /
 
@@ -34,16 +34,15 @@
 /
 
 &info
-   runid = 'as_omstep_lowbeta2'
-   description = ''
-   datetime = '25-08-24_16:24'
+   runid = 'as_omstep_EVbugfixnochange'
+   description = 'rerunning as_omstep_lowbeta2 to test the EV>1 bugfix'
+   datetime = '10-02-25_17:08'
 /
 
 &scanparam_0
    paramkey = 'omega_step'
-   nodes = 0, 1.2
-   nsteps = 12
+   nodes = 1, 1.45
+   nsteps = 10
    vals = ,
    descending = .true.
 /
-

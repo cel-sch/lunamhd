@@ -255,7 +255,7 @@ class lunaScan(object):
 
         if figidx == 0:
             plt.figure()
-            plt.plot(s, xi)
+            plt.plot(s, xi_)
             plt.savefig(f"{self.runid}_xi.png")
         return p, p2
 
@@ -598,6 +598,8 @@ class lunaScan(object):
 
         if self['mode_type'] == 'IK':
             eq.Omega = -eq.Omega # KH doesn't run well if this is not set
+
+        # eq.Omega = -eq.Omega # DONT FORGET TO RE-TOGGLE THIS
 
         # Calculate Shafranov stuff
         LHS = eq.dFds*eq.g22/(eq.q*eq.R2)+eq.F*eq.dg22ds/(eq.q*eq.R2)-eq.F*eq.g22*eq.dqds/(eq.q**2*eq.R2)-eq.F*eq.g22*eq.dR2ds/(eq.q*eq.R2**2.)-eq.F/eq.q*(eq.dg12du/eq.R2-eq.g12*eq.dR2du/eq.R2**2.)

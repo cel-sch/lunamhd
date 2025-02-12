@@ -6,7 +6,7 @@ Created on Wed Dec 13 15:33:53 2023
 """
 from copy import deepcopy
 from textwrap import wrap
-from numpy import float64, pi, linspace
+from numpy import float64, pi, linspace, sqrt
 
 from matplotlib.pyplot import subplots, show, ion, axes, tight_layout, text
 from matplotlib.widgets import Slider, Button
@@ -55,6 +55,8 @@ class plot_growth(object):
         self.xkey = None
         self.ykeys = None
         self.scan_specs = scan_specs
+
+        self.wA_avgNorm = True # convert VENUS outputs to wA_avg normalisation or not
 
         self.open_plot()
                 
@@ -160,8 +162,8 @@ class plot_growth(object):
         return info
         
     def _load_x_axis(self, axis_type):
-        if axis_type not in ['initparam', 'peakedness', 'peakedness2', 'peakedness_anal']:
-            print("ERROR: axis_type not found, valid types ['initparam', 'peakedness', 'peakedness2']")
+        if axis_type not in ['initparam', 'peakedness', 'peakedness2', 'xstep_norm']:
+            print("ERROR: axis_type not found, valid types ['initparam', 'peakedness', 'peakedness2','xstep_norm']")
             return
         self.initparam = deepcopy(self.reader.info['scanorder'][0])
         self.spar_list = self.reader.info['scanparams'][self.initparam]
@@ -191,8 +193,8 @@ class plot_growth(object):
         mu0 = 4.*pi*1.0E-07
         steps = []
         avgs = []
-        for idx in linspace(0, len(self.spar_list)-1):
-            for key, vals in self.reader.get_profiles_list(scanparam = self.xkey, spar_list = self.spar_list[idx], paramSpecs = scan, _returnBoth = False).items():
+        for idx in range(len(self.spar_list)):
+            for key, vals in self.reader.get_profiles_list(scanparam = self.initparam, spar_list = self.spar_list[idx], paramSpecs = scan, _returnBoth = False).items():
                 EF_file = key
                 prof_dict = vals
             EF_file = EF_file.split('/')[-1]
@@ -203,20 +205,20 @@ class plot_growth(object):
             M02 = prof_dict['M02']
 
             if prof in ['omega', 'Omega']:
-                Omega = prof_dict['Omega']
+                Omega = prof_dict['omega']
                 Omega = Omega*B0/(M02*mu0*P0)
 
                 step = (Omega[0] - Omega[-3])/2
                 avg = (Omega[0] + Omega[-3])/2
             elif prof == 'rho':
                 rho = prof_dict['rho']
-                rho0 = self.reader.get_1d_list(scanparam = self.xkey, variable = 'rho0', spar_list = self.spar_list[idx], paramSpecs = scan, _returnBoth = False)
+                rho0 = self.reader.get_1d_list(scanparam = self.initparam, variable = 'rho0', spar_list = self.spar_list[idx], paramSpecs = scan, _returnBoth = False)
                 rho = rho*rho0
 
                 step = (rho[0] - rho[-3])/2
                 avg = (rho[0] + rho[-3])/2
             elif prof == 'beta':
-                P = prof_dict['P']
+                P = prof_dict['p']
                 eps_a = 1/R0
                 P = 2*P/eps_a**2
 
@@ -251,6 +253,10 @@ class plot_growth(object):
             x_vals = [i/j for i, j in zip(x_step, x_avg)]
 
         y_vals = self.reader.get_1d_list(self.initparam, self.ykeys, spar_list = self.spar_list,  paramSpecs = scan, _returnBoth = False) # need to check what happens if paramSpecs = None
+        if self.wA_avgNorm:
+            rhosteps, rhoavgs = self.load_stepavg('rho', scan = scan) # there is a rhostep and rhoavg value associated with every gam value
+            conversion = [sqrt(j/(i+j)) for i,j in zip(rhosteps, rhoavgs)]
+            y_vals = [i*j for i,j in zip(y_vals, conversion)]
             
         if self['EV_visible']['gam']:
             gam_vals = [i.real for i in y_vals]

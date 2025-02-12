@@ -396,7 +396,7 @@ class plot_multi(object):
                 y_vals = [i.real*10 for i in y_vals] # for a fixed aspect ratio of 10
             elif self['y_axis_type'] == 'wr':
                 y_vals = [i.imag*10 for i in y_vals] # for a fixed aspect ratio of 10
-                y_vals = [-i for i in y_vals]
+                y_vals = [i for i in y_vals] # TOGGLE WR SIGN FOR VENUS RESULTS, WRSIGN
             a_y_vals = None
 
             # elif self.scankeys[f'{reader}'] == 'mach' and self['rot_axis_type'] in ['omega', 'Omega']: # Change x_vals from mach to omegahat if needed, probably broken but i am not fixing this rn
