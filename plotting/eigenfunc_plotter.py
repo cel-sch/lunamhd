@@ -40,9 +40,15 @@ class plot_EF(object):
             else:
                 self.settings[key] = settings[key]
                 
-        self.labels = {'mach':'$\mathcal{M}$','beta0':'$β_0$','rmaj':'$R_0$','b0':'$B_0$',
-                       'gam':'$\hat{γ}$','wr':'$\hat{w}_r$','EV':'$\hat{ω}',
-                       'drstep':'$Δr_{step}$', 'q0':'$q_0$', 'rationalm':'m'}
+        self.labels = {'omega':'$\hat{Ω}$','beta':'$β$','delq':'$\hat{Δq}$','rho':'ρ','sig1':'σ', 'mach':'$\mathcal{M}$',
+                        'omega0':'$\hat{Ω}_0$','omega1':'$\hat{Ω}_1$','omega_avg':'$\hat{Ω}_{avg}$', 'omega_step':'$\hat{Ω}_{step}$',
+                        'rho0':'$ρ_0$','rho1':'$ρ_1$','rho_avg':'$ρ_{avg}$','rho_step':'$ρ_{step}$',
+                        'beta0':'$β_0$','beta1':'$β_1$','beta_avg':'$β_{avg}$','beta_step':'$β_{step}$',
+                        'T_ratio':'$T_0/T_1$',
+                        'rmaj':'$R_0$','b0':'$B_0$','drstep':'$Δr_{step}$', 'q0':'$q_0$', 'rationalm':'m',
+                        'eps_a':'$ε_a$','Gamma':'Γ','gam':'$γ/ω_A$','asygam':'asymptotic $γ/ω_A$',
+                        'y_step':'$(y_0-y_1)/2$', 'y_avg':'$y_{avg}$','y0':'$y_0$', 'y1':'$y_1$',
+                        'EV':'$ω/ω_A$','a_EV':'asymptotic $ω/ω_A$','wr':'$ω_r/ω_A$','asywr':'asymptotic $ω_r/ω_A$'}
                 
         self.xkey = None
         self.ykeys = None
@@ -151,7 +157,7 @@ class plot_EF(object):
         self.xkey = self.scanparam # required for input to retrieve list of eigenfuncs
         # self.r = linspace(0.,1.,102) # need to read this properly from the h5 file probably
         # self.r = sqrt(self.r)
-        self._x_ax_label = 'r'
+        self._x_ax_label = 's'
         
     def _load_y_axis(self, axis_type):
         if axis_type not in ['eigenfunc']:
@@ -163,7 +169,8 @@ class plot_EF(object):
 
     def plot_vals(self, scan = {}):
         val = self.slider.val if self.slider is not None else 0
-        for key, vals in self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = self.spar_list[val], paramSpecs = scan, _returnBoth = False).items():
+        s = self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = self.spar_list[val], paramSpecs = scan, _returnBoth = False)[1]
+        for key, vals in self.reader.get_eigenfunc_list(varnrs = self.varnrs, scanparam = self.xkey, spar_list = self.spar_list[val], paramSpecs = scan, _returnBoth = False)[0].items():
             EF_file = key
             EF = vals # dictionary like {'var_1':..., 'var_2':..., ...}
 
@@ -171,7 +178,7 @@ class plot_EF(object):
             self.ax[i].cla()
             for m_val, mode in var_allms.items():
                 r = sqrt(linspace(0.,1.,len(mode))) # need to read this properly from the h5 file probably
-                self.ax[i].plot(r, mode, label=f'{m_val}') 
+                self.ax[i].plot(s, mode, label=f'{m_val}') 
                 if self['visible']['title']:
                     self.ax[i].set_title(f'Variable {self.varnrs[i]+1}, {self._getlabel(self.xkey)} = {self.spar_list[val]:.4f}')
                 self.ax[i].legend()

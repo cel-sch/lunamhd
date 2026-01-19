@@ -1,0 +1,42 @@
+&fixed_params
+   profile = 'rot_0'
+   beta_avg = 0.018
+   rmaj = 10
+   a = 1
+   n = -1
+   rationalm = 1
+   sidebands = 5
+   b0 = 1
+   rs = 0
+   qs = 2
+   delq = 0.01
+   nu_q = 8
+   nu_n = 6
+   drstep = 0.4
+   init_evguess = 0.4
+   grid_res = 100
+/
+
+&initialisers
+   run_vmec = .true.
+   run_venus = .true.
+   peakedness = .false.
+   ev_guess_type = 'last_ev'
+   mode_type = 'KH'
+   vmec_ver = 9
+   splines = 
+/
+
+&info
+   runid = 
+   description = 'reproducing old fig 5 dr0=0.4 case to check eigenfunctions are being plotted in the same way'
+   datetime = 
+/
+
+&scanparam_0
+   paramkey = 'mach'
+   nodes = 1.9, 2
+   nsteps = 1
+   vals = ,
+   descending = .true.
+/

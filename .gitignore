@@ -1,14 +1,13 @@
 # Ignore VMEC files
 VMEC/*
 !VMEC/xvmec2000_flow_netcdf
-!VMEC/vmec_flow
 !VMEC/input/input.Default
 
 # Ignore output files
 Output/*
 
 # Ignore results (figures)
-Results/*
+*.png
 
 # Ignore random other folders
 AEs/*
