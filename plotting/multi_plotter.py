@@ -74,7 +74,7 @@ class plot_multi(object):
         if 'viking' in socket.gethostname():
             self.outpath = Path('/users/cs2427/scratch/lunamhd-data/')
         else:
-            self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Output/KH')
+            self.outpath = Path('/Users/cellywelly/Dev/lunamhd/Output/KH')
                 
         self.initparams = {}
         self.xkeys = {}

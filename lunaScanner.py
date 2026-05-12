@@ -45,8 +45,8 @@ class lunaScan(object):
             self.inputpath_root = Path('/users/cs2427/lunamhd')
             self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
         else:
-            self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
-            self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
+            self.inputpath_root = Path('/Users/cellywelly/Dev/lunamhd')
+            self.outputpath_root = Path('/Users/cellywelly/Dev/lunamhd/Output')
 
         ### Define path to input file. Default is lunamhd/Input/default.in
         self.inputfile = inputfile

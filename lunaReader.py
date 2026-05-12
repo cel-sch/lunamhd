@@ -1,4 +1,5 @@
 import h5py
+import socket
 import numpy as np
 import scipy.integrate as spi
 from pathlib import Path
@@ -11,8 +12,11 @@ from lunamhd.plotting import Plotters
 class lunaRead(object):
     def __init__(self, filename, filePath = None):
         self.filename = filename
-        #self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
-        self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
+        ### Default path stuff
+        if 'viking' in socket.gethostname():
+            self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
+        else:
+            self.outputpath_root = Path('/Users/cellywelly/Dev/lunamhd/Output')
         if filePath is None:
                 filePath = Path(self.outputpath_root / 'KH' / f'{self.filename}')
         else:
