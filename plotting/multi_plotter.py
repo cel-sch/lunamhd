@@ -4,6 +4,7 @@ Created on Wed Dec 13 15:33:53 2023
 
 @author: celin
 """
+import socket
 from copy import deepcopy
 from textwrap import wrap
 from numpy import sqrt, loadtxt, float64, pi, linspace
@@ -12,7 +13,7 @@ from pathlib import Path
 from matplotlib.pyplot import subplots, show, ion, axes, tight_layout
 from matplotlib.widgets import Slider, Button
 
-import AEmhd
+import plutomhd
 import lunamhd
 
 default_settings = {'suptitle': None,
@@ -70,8 +71,10 @@ class plot_multi(object):
                         'y_step':'$(y_0-y_1)/2$', 'y_avg':'$y_{avg}$','y0':'$y_0$', 'y1':'$y_1$',
                         'EV':'$\hat{ω}$','a_EV':'asymptotic $\hat{ω}$','wr':'$\hat{ω}_r$','asywr':'asymptotic $\hat{ω}_r$'}
 
-        #self.outpath = Path('/users/cs2427/scratch/lunamhd-data/') # for running on viking
-        self.outpath = Path(f'/home/csch/VENUS-linux/lunamhd/Output/KH') # for running locally
+        if 'viking' in socket.gethostname():
+            self.outpath = Path('/users/cs2427/scratch/lunamhd-data/')
+        else:
+            self.outpath = Path('/home/csch/VENUS-linux/lunamhd/Output/KH')
                 
         self.initparams = {}
         self.xkeys = {}

@@ -9,6 +9,7 @@ import numpy as np
 import scipy.integrate as spi
 import matplotlib.pyplot as plt
 import os
+import socket
 from datetime import datetime
 import time
 import random
@@ -40,10 +41,12 @@ class lunaScan(object):
         #'last_ev': last EV used as guess for next one, 'polynom_ev': polynomial fit used as guess for next one
 
         ### Default path stuff
-        self.inputpath_root = Path('/users/cs2427/lunamhd')
-        # self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
-        self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
-        # self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
+        if 'viking' in socket.gethostname():
+            self.inputpath_root = Path('/users/cs2427/lunamhd')
+            self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
+        else:
+            self.inputpath_root = Path('/home/csch/VENUS-linux/lunamhd')
+            self.outputpath_root = Path('/home/csch/VENUS-linux/lunamhd/Output')
 
         ### Define path to input file. Default is lunamhd/Input/default.in
         self.inputfile = inputfile
