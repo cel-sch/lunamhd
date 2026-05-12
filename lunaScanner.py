@@ -265,7 +265,7 @@ class lunaScan(object):
     def _buildVMEC(self, idx = 0):
               
         #Read the default input file
-        C = VMECInput.ReadInputVMEC(self.inputpath_root / 'VMEC/input/input.Default') 
+        C = VMECInput.ReadInputVMEC(self.inputpath_root / 'VMEC/input/input.Default', vmec_ver=self['vmec_ver']) 
         
         #Modify some grid and control parameters, these get written to VMEC input
         #======================================================================

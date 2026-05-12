@@ -100,7 +100,7 @@ class plot_growth(object):
         if self['visible']['grid']:
             self.ax.grid()
         
-        ion()
+        # ion()
         show()
         self.draw_fig()
 

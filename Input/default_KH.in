@@ -1,19 +1,25 @@
 &fixed_params
-   profile = 'rot'
-   beta0 = 0.018
+   profile = 'all_step'
+   mach = 0
+   omega_avg = 1.5
+   omega_step = 0.5
+   rho_avg = 1
+   rho_step = 0
+   beta_avg = 0.005
+   beta_step = 0.002
    rmaj = 10
    a = 1
    n = -1
-   rationalm = 1
+   rationalm = 2
    sidebands = 5
    b0 = 1
    rs = 0
    qs = 2
-   delq = 0.01
+   delq = 0.1
    nu_q = 8
    nu_n = 6
    drstep = 0.15
-   init_evguess = 0.9
+   init_evguess = 1.8
    grid_res = 100
 /
 
@@ -24,19 +30,20 @@
    ev_guess_type = 'last_ev'
    mode_type = 'KH'
    vmec_ver = 9
-   splines = 'q', 'p', 'o', 't'
+   splines = 'o', 't', 'q', 'p'
 /
 
 &info
-   runid = 
-   description = 'all splined test fig 5'
-   datetime = 
+   runid = 'as_omstep_EVbugfixnochange'
+   description = 'rerunning as_omstep_lowbeta2 to test the EV>1 bugfix'
+   datetime = '10-02-25_17:08'
 /
 
 &scanparam_0
-   paramkey = 'mach'
-   nodes = 0.9, 1
+   paramkey = 'omega_step'
+   nodes = 1, 1.1
    nsteps = 1
    vals = ,
    descending = .true.
 /
+
