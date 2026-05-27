@@ -228,7 +228,10 @@ class lunaScan(object):
 
     def _make_scan_list(self):
         # Makes the list of e.g. [{'beta':1,'delq':0.1},{'beta':1,'delq':0.2}]
+        # Returns [] for 1D scans so self.scans stays falsy (1D path in run/save_run).
         scandim = self.scandim
+        if scandim <= 1:
+            return []
 
         def loop(n = scandim - 1, scandim = scandim, scanvars = {}, scans = []):
             if n == 0:
@@ -324,10 +327,10 @@ class lunaScan(object):
         print(f"integral dy/ds: {spi.simps(dyds, x=s)}")
         print(f"peakedness: {p}")
 
-        if figidx == 0:
-            plt.figure()
-            plt.plot(s, xi_)
-            plt.savefig(f"{self.runid}_xi.png")
+        # if figidx == 0:
+        #     plt.figure()
+        #     plt.plot(s, xi_)
+        #     plt.savefig(f"{self.runid}_xi.png")
         return p, p2
 
     def _buildVMEC(self, idx = 0, skip_exec = False):
