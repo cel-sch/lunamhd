@@ -17,7 +17,7 @@ default_settings = {'suptitle': None,
                     'y_axis_type':'eigenval', # ['eigenval','margin_stab']
                     'x_axis_type':'initparam', # ['initparam', 'peakedness', 'peakedness2', 'peakedness_anal', 'xstep_norm']
                     'EV_visible':{'gam':True, 'wr':False},
-                    'EV_guess':True,
+                    'EV_guess':False,
                     'fig_type':'general', # ['paper', 'singleplot']
                     'fontsizes':{'general':{'title':14,'axis':12,'suptitle':20},
                                  'paper':{'title':10,'axis':9,'suptitle':12}},
@@ -103,7 +103,6 @@ class plot_growth(object):
         
         self.draw_fig()
         plt.show(block=False)
-        plt.pause(0.1)
 
     def _make_scan_loop(self):
         # scan_specs format e.g.: {'Omega':[1,2,3], 'beta':0.5}
