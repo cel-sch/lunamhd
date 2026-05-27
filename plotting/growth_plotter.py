@@ -100,9 +100,9 @@ class plot_growth(object):
         if self['visible']['grid']:
             self.ax.grid()
         
-        # ion()
-        show()
+        ion()
         self.draw_fig()
+        show()
 
     def _make_scan_loop(self):
         # scan_specs format e.g.: {'Omega':[1,2,3], 'beta':0.5}
