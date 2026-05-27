@@ -1004,10 +1004,13 @@ class lunaScan(object):
         for key in self.scanparams:
             completed_vals = []
             for scandata in rundata.values():
+                if not isinstance(scandata, dict):
+                    continue
                 for point in scandata.values():
-                    params = point.get('params') if isinstance(point, dict) else None
-                    if params and key in params and params[key] not in completed_vals:
-                        completed_vals.append(params[key])
+                    if not isinstance(point, dict) or 'params' not in point:
+                        continue
+                    if key in point['params'] and point['params'][key] not in completed_vals:
+                        completed_vals.append(point['params'][key])
             completed_scanparams[key] = [v for v in self.scanparams[key] if v in completed_vals]
         runinfo['scanparams'] = completed_scanparams
 
