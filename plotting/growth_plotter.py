@@ -8,6 +8,7 @@ from copy import deepcopy
 from textwrap import wrap
 from numpy import float64, pi, linspace, sqrt
 
+import matplotlib.pyplot as plt
 from matplotlib.pyplot import subplots, show, ion, axes, tight_layout, text
 from matplotlib.widgets import Slider, Button
 
@@ -100,9 +101,9 @@ class plot_growth(object):
         if self['visible']['grid']:
             self.ax.grid()
         
-        ion()
         self.draw_fig()
-        show()
+        plt.show(block=False)
+        plt.pause(0.1)
 
     def _make_scan_loop(self):
         # scan_specs format e.g.: {'Omega':[1,2,3], 'beta':0.5}
