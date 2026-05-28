@@ -180,6 +180,63 @@ class WoutReader:
         ]
         return '\n'.join(lines)
 
+    def get_rz_coeffs(self):
+        """Return R/Z Fourier coefficients as a structured dict.
+
+        Returns
+        -------
+        dict with keys:
+            s       : 1-D array (ns,)          normalised flux label sqrt(phi/phi_edge)
+            m       : 1-D int array (mn_mode,)  poloidal mode numbers
+            n       : 1-D int array (mn_mode,)  toroidal mode numbers
+            rmnc    : 2-D array (ns, mn_mode)   R cosine coefficients [m]
+            zmns    : 2-D array (ns, mn_mode)   Z sine coefficients   [m]
+        """
+        return {
+            's':    self.s.copy(),
+            'm':    self.xm.astype(int).copy(),
+            'n':    self.xn.astype(int).copy(),
+            'rmnc': self.rmnc.copy(),
+            'zmns': self.zmns.copy(),
+        }
+
+    def save_rz_coeffs(self, outpath=None, fmt='csv'):
+        """Save R/Z Fourier coefficients to a file.
+
+        Parameters
+        ----------
+        outpath : str or Path, optional
+            Output path. Defaults to <wout_stem>_rz_coeffs.<fmt> in the same directory.
+        fmt : 'csv' or 'npz'
+            'csv' writes a long-format table (s, m, n, rmnc, zmns).
+            'npz' saves the arrays directly (load with np.load).
+
+        Returns
+        -------
+        Path of the saved file.
+        """
+        if outpath is None:
+            outpath = self.path.parent / f'{self.path.stem}_rz_coeffs.{fmt}'
+        outpath = Path(outpath)
+
+        coeffs = self.get_rz_coeffs()
+
+        if fmt == 'npz':
+            np.savez(str(outpath), **coeffs)
+        elif fmt == 'csv':
+            import csv
+            with open(outpath, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['s', 'm', 'n', 'rmnc', 'zmns'])
+                for i, s_val in enumerate(coeffs['s']):
+                    for j, (m, n) in enumerate(zip(coeffs['m'], coeffs['n'])):
+                        writer.writerow([s_val, int(m), int(n),
+                                         coeffs['rmnc'][i, j], coeffs['zmns'][i, j]])
+        else:
+            raise ValueError(f"Unknown format '{fmt}', choose 'csv' or 'npz'")
+
+        return outpath
+
 
 # ---------------------------------------------------------------------------
 # Convenience function: read all wout files for a run into a list
@@ -193,28 +250,80 @@ def read_run_wouts(run_name, run_dir=None):
     return [WoutReader(p) for p in paths]
 
 
+def extract_rz_coeffs(run_name_or_path, index=None, fmt='csv', outdir=None):
+    """Extract and save R/Z Fourier coefficients for one or all wout files in a run.
+
+    Parameters
+    ----------
+    run_name_or_path : str or Path
+        Path to a wout .nc file, or a run name (uses the default output root).
+    index : int or None
+        Specific wout index to process. If None and a run name is given, all
+        wout files in the run are processed.
+    fmt : 'csv' or 'npz'
+    outdir : str or Path, optional
+        Directory for output files. Defaults to each wout file's own directory.
+
+    Returns
+    -------
+    list of Path objects pointing to the saved files.
+    """
+    path = Path(run_name_or_path)
+
+    if path.suffix == '.nc':
+        readers = [WoutReader(path)]
+    elif index is not None:
+        readers = [WoutReader(find_wout(run_name_or_path, index=index))]
+    else:
+        readers = read_run_wouts(run_name_or_path)
+
+    saved = []
+    for w in readers:
+        if outdir is not None:
+            out = Path(outdir) / f'{w.path.stem}_rz_coeffs.{fmt}'
+        else:
+            out = None
+        p = w.save_rz_coeffs(outpath=out, fmt=fmt)
+        print(f"  Saved {p.name}  ({w.ns} surfaces, {w.mnmax} modes)")
+        saved.append(p)
+
+    return saved
+
+
 # ---------------------------------------------------------------------------
 # Script entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print("Usage: vmecReader.py <path/to/wout_*.nc> [<index>]")
-        print("       vmecReader.py <run_name>  (uses default output path)")
-        sys.exit(1)
+    import argparse
 
-    arg = sys.argv[1]
-    path = Path(arg)
+    parser = argparse.ArgumentParser(
+        description='Read VMEC wout NetCDF files — print summary or extract R/Z coefficients.')
+    parser.add_argument('target',
+                        help='Path to wout .nc file, or run name (uses default output root)')
+    parser.add_argument('--index', type=int, default=None,
+                        help='Wout file index (default: 0 for summary; all indices for --coeffs)')
+    parser.add_argument('--coeffs', action='store_true',
+                        help='Extract R/Z Fourier coefficients to file')
+    parser.add_argument('--fmt', choices=['csv', 'npz'], default='csv',
+                        help='Output format when using --coeffs (default: csv)')
+    parser.add_argument('--outdir', default=None,
+                        help='Output directory for extracted coefficient files')
+    args = parser.parse_args()
 
-    if path.suffix == '.nc' and path.exists():
-        w = WoutReader(path)
-        print(w.summary())
+    if args.coeffs:
+        print(f"Extracting R/Z coefficients ({args.fmt}) ...")
+        extract_rz_coeffs(args.target, index=args.index, fmt=args.fmt, outdir=args.outdir)
     else:
-        # treat as run_name, load index 0 by default
-        idx = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-        wout_path = find_wout(arg, index=idx)
-        if not wout_path.exists():
-            print(f"ERROR: {wout_path} not found")
-            sys.exit(1)
-        w = WoutReader(wout_path)
-        print(w.summary())
+        path = Path(args.target)
+        if path.suffix == '.nc' and path.exists():
+            w = WoutReader(path)
+            print(w.summary())
+        else:
+            idx = args.index if args.index is not None else 0
+            wout_path = find_wout(args.target, index=idx)
+            if not wout_path.exists():
+                print(f"ERROR: {wout_path} not found")
+                sys.exit(1)
+            w = WoutReader(wout_path)
+            print(w.summary())
