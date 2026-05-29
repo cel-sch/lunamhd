@@ -101,11 +101,19 @@ class VmecPlotter:
     # -----------------------------------------------------------------------
     # Plot 1: flux surfaces in R-Z, coloured by |B| on each surface
     # -----------------------------------------------------------------------
-    def flux_surfaces(self, n_surfaces=12, ax=None, show=True, title=None):
+    def flux_surfaces(self, n_surfaces=12, ax=None, show=True, title=None,
+                      shaping=False, venus=None):
         """
         R-Z cross-section with flux surface contours.
         Surfaces are evenly spaced in s ∈ (0,1], skipping the axis.
         Contour colour = mean |B| on each surface.
+
+        shaping : bool
+            If True, overlay the analytic Graves m=0,1,2 reconstruction from
+            ShapingCoeffs as dashed lines (same colour) for comparison.
+        venus : str or Path, optional
+            Path to a VENUS-MHD HDF5 output file.  If given, overlays the
+            VENUS flux surfaces (white dashed lines) for direct comparison.
         """
         w = self.w
         ns = w.ns
@@ -122,6 +130,27 @@ class VmecPlotter:
         else:
             fig = ax.get_figure()
 
+        # Optionally build analytic reconstruction from shaping coefficients
+        R_an = Z_an = None
+        if shaping:
+            from vmecShaping import ShapingCoeffs
+            sc = ShapingCoeffs(w)
+            R_an, Z_an = sc.reconstruct(self.theta)
+
+        # Optionally load VENUS flux surface geometry
+        R_ven = Z_ven = None
+        if venus is not None:
+            import h5py
+            with h5py.File(str(venus), 'r') as f:
+                _R0v = float(f['normalisation']['R0'][()])
+                _R   = f['geometry']['R'][()]   # (ntheta_v, ns_v), normalised
+                _Z   = f['geometry']['Z'][()]
+            # convert to physical metres; shape → (ns_v, ntheta_v) to match VMEC
+            R_ven = (_R * _R0v).T
+            Z_ven = (_Z * _R0v).T
+
+        _labelled_an  = False
+        _labelled_ven = False
         for idx in indices:
             colour = cmap((B_mean[idx] - B_min) / (B_max - B_min + 1e-30))
             ax.plot(
@@ -129,6 +158,26 @@ class VmecPlotter:
                 np.append(self.Z[idx], self.Z[idx, 0]),
                 color=colour, lw=0.8
             )
+            if R_an is not None:
+                label = 'Graves analytic (m≤2)' if not _labelled_an else None
+                _labelled_an = True
+                ax.plot(
+                    np.append(R_an[idx], R_an[idx, 0]),
+                    np.append(Z_an[idx], Z_an[idx, 0]),
+                    '--', color=colour, lw=0.6, alpha=0.7, label=label
+                )
+
+        if R_ven is not None:
+            ns_v = R_ven.shape[0]
+            v_indices = np.round(np.linspace(1, ns_v - 1, n_surfaces)).astype(int)
+            for i, vidx in enumerate(v_indices):
+                label = 'VENUS' if not _labelled_ven else None
+                _labelled_ven = True
+                ax.plot(
+                    np.append(R_ven[vidx], R_ven[vidx, 0]),
+                    np.append(Z_ven[vidx], Z_ven[vidx, 0]),
+                    '--', color='white', lw=0.6, alpha=0.7, label=label
+                )
 
         # Axis point (s=0 → single R,Z value from m=0 mode)
         R_ax = w.rmnc[0, 0]   # rmnc(s=0, m=0, n=0)
@@ -144,6 +193,8 @@ class VmecPlotter:
         ax.set_aspect('equal')
         ax.set_title(title or Path(self.w.path).name)
         ax.grid(True, alpha=0.3)
+        if R_an is not None or R_ven is not None:
+            ax.legend(fontsize=7, loc='lower right')
 
         if show:
             plt.tight_layout()

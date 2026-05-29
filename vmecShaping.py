@@ -197,6 +197,31 @@ class ShapingCoeffs:
     # Public interface
     # ------------------------------------------------------------------
 
+    def reconstruct(self, theta):
+        """
+        Reconstruct R(θ) and Z(θ) analytically from the m=0,1,2 Graves shaping
+        coefficients (truncated Fourier expansion, Appendix B1).
+
+            R(s,θ) = R₀ + (r + S₂)·cos θ + S₃·cos 2θ
+            Z(s,θ) =      (r − S₂)·sin θ
+
+        Parameters
+        ----------
+        theta : 1-D array, shape (ntheta,)
+
+        Returns
+        -------
+        R, Z : 2-D arrays, shape (ns, ntheta)
+        """
+        R0 = self.R0[:, np.newaxis]
+        r  = self.r[:, np.newaxis]
+        S2 = self.S2[:, np.newaxis]
+        S3 = self.S3[:, np.newaxis]
+
+        R = R0 + (r + S2) * np.cos(theta) + S3 * np.cos(2 * theta)
+        Z =      (r - S2) * np.sin(theta)
+        return R, Z
+
     def get_mode(self, coeff, m, n=0):
         """
         Return the radial profile of any Fourier mode (m, n) from the wout data.
