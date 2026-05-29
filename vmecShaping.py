@@ -2,31 +2,38 @@
 """
 Analytic shaping coefficient extraction from VMEC wout Fourier coefficients.
 
-Shaping coefficients are derived from the n=0 Fourier modes of R and Z at each
-flux surface.  For 3-D equilibria (stellarators) the n=0 modes represent the
-toroidally-averaged shape; for axisymmetric cases they are exact.
+Shaping coefficients are derived from the n=0 Fourier modes of R, Z, and B at
+each flux surface.  For 3-D equilibria (stellarators) the n=0 modes represent
+the toroidally-averaged shape; for axisymmetric cases they are exact.
 
-The extended Miller parameterisation relates the Fourier harmonics to geometry:
+Based on the parameterisation of Graves, PPCF 55 (2013) 074009, Appendix B1.
+The VMEC Fourier harmonics are identified with analytical coefficients via:
 
-    R(θ) = R₀(s) + R₁c cos θ + R₂c cos 2θ + R₃c cos 3θ + …
-    Z(θ) =         Z₁s sin θ + Z₂s sin 2θ + Z₃s sin 3θ + …
+    R(θ) = R₀(s) + R₁c cos θ + R₂c cos 2θ + …
+    Z(θ) =         Z₁s sin θ + Z₂s sin 2θ + …
+    B(θ) = B₀c    + B₁c cos θ + B₂c cos 2θ + …
 
-where Rmc = rmnc[s, m, n=0] and Zms = zmns[s, m, n=0].
+where Rmc = rmnc[s, m, n=0], Zms = zmns[s, m, n=0], Bmc = bmnc[s, m, n=0].
 
-Quantities computed
--------------------
+Quantities computed  (Graves 2013 notation)
+-------------------------------------------
 R0(s)   major radius profile    rmnc[m=0, n=0]
-a(s)    minor radius            rmnc[m=1, n=0]   (dominant horizontal amplitude)
-κ(s)    elongation              zmns[1,0] / rmnc[1,0]
-δ(s)    triangularity           sin(2·rmnc[2,0] / rmnc[1,0])   (Miller relation)
-ζ(s)    squareness              −zmns[3,0] / zmns[1,0]          (Turnbull–Miller)
-Δ(s)    Shafranov shift         rmnc[0,0](s) − rmnc[0,0](boundary)
+a(s)    minor radius            rmnc[m=1, n=0]
+ε(s)    inverse aspect ratio    a / R0
+r(s)    mean semi-axis          (R₁c + Z₁s) / 2
+S₂(s)   elongation amplitude    (R₁c − Z₁s) / 2
+S₃(s)   triangularity amplitude rmnc[m=2, n=0]
+κ(s)    elongation              (r − S₂) / (r + S₂) = Z₁s / R₁c
+δ(s)    triangularity           4 S₃ / r
+Δ(s)    Shafranov shift         R0[0] − R0(s)
+F₂(s)   toroidal flux variation  bsubvmnc[m=0, n=0] / rbtor0 − 1
+DI      Mercier shape factor     (3/4)(κ−1)(1 − 2δ/ε)
 
 Sign conventions
 ----------------
-δ > 0   inward triangularity (D-shape, HFS indent at top/bottom)
-ζ > 0   square corners (outward displacement at ±45°)
-Δ > 0   outward shift of flux surface centre relative to boundary centre
+δ > 0   inward triangularity (D-shape)
+Δ > 0   outward shift from axis
+F₂ < 0  typical (diamagnetic: finite-β reduces toroidal flux function)
 
 Axis note
 ---------
@@ -79,11 +86,16 @@ class ShapingCoeffs:
     -----------------------------------------
     s       normalised flux label
     R0      major radius profile
-    a       minor radius profile
-    kappa   elongation κ
-    delta   triangularity δ
-    zeta    squareness ζ
-    shift   Shafranov shift Δ
+    a       minor radius (= R₁c)
+    eps     inverse aspect ratio a/R0
+    r       mean semi-axis (R₁c + Z₁s)/2
+    S2      elongation amplitude (R₁c − Z₁s)/2
+    S3      triangularity amplitude R₂c
+    kappa   elongation κ = Z₁s/R₁c
+    delta   triangularity δ = 4S₃/r
+    shift   Shafranov shift Δ (positive = outward from axis)
+    F2      toroidal flux variation bsubvmnc[m=0,n=0]/rbtor0 − 1
+    di      Mercier shape factor DI
     """
 
     def __init__(self, wout):
@@ -97,8 +109,15 @@ class ShapingCoeffs:
     # ------------------------------------------------------------------
 
     def _get_n0(self, arr, m):
-        """Return the radial profile for mode (m, n=0) from a 2-D coeff array."""
+        """Return the radial profile for mode (m, n=0) from a 2-D coeff array (xm/xn grid)."""
         idx = np.where((self.wout.xm == m) & (self.wout.xn == 0))[0]
+        if len(idx) == 0:
+            return np.zeros(self.wout.ns)
+        return arr[:, idx[0]].copy()
+
+    def _get_n0_nyq(self, arr, m):
+        """Return the radial profile for mode (m, n=0) from a 2-D coeff array (xm_nyq/xn_nyq grid)."""
+        idx = np.where((self.wout.xm_nyq == m) & (self.wout.xn_nyq == 0))[0]
         if len(idx) == 0:
             return np.zeros(self.wout.ns)
         return arr[:, idx[0]].copy()
@@ -112,6 +131,9 @@ class ShapingCoeffs:
         self._Z1s = self._get_n0(self.wout.zmns, 1)
         self._Z2s = self._get_n0(self.wout.zmns, 2)
         self._Z3s = self._get_n0(self.wout.zmns, 3)
+        # Toroidal flux function F = R·Bφ (Nyquist grid covariant toroidal B)
+        # For axisymmetric case: B_ζ = ∂r/∂ζ · B = R·Bφ = F(ψ) exactly
+        self._Fv = self._get_n0_nyq(self.wout.bsubvmnc, 0)
 
     def _safe_div(self, num, den):
         """Element-wise division; return NaN where den == 0 (axis singularity)."""
@@ -122,23 +144,54 @@ class ShapingCoeffs:
     # Coefficient computation
     # ------------------------------------------------------------------
 
+    # def _compute(self):
+    #     # what claude produced
+    #     R1c = self._R1c
+    #     Z1s = self._Z1s
+
+    #     self.R0    = self._R0c.copy()
+    #     self.a     = R1c.copy()
+    #     self.kappa = self._safe_div(Z1s, R1c)
+
+    #     # Miller: δ = sin(arcsin(δ)) where arcsin(δ) = 2·R2c / R1c
+    #     angle      = self._safe_div(2.0 * self._R2c, R1c)
+    #     self.delta = np.where(np.isfinite(angle), np.sin(angle), np.nan)
+
+    #     # Turnbull–Miller squareness: ζ = −Z3s / Z1s
+    #     self.zeta  = self._safe_div(-self._Z3s, Z1s)
+
+    #     # Shafranov shift relative to boundary (positive = outward)
+    #     self.shift = self._R0c - self._R0c[-1]
+
     def _compute(self):
-        R1c = self._R1c
-        Z1s = self._Z1s
+        # Based on PPCF 55 2013 074009, Appendix B1
+        R0c = self._R0c.copy()
+        R1c = self._R1c.copy()
+        R2c = self._R2c.copy()
+        Z1s = self._Z1s.copy()
 
-        self.R0    = self._R0c.copy()
-        self.a     = R1c.copy()
-        self.kappa = self._safe_div(Z1s, R1c)
+        self.R0  = R0c
+        self.a   = R1c
+        self.eps = self._safe_div(self.a, self.R0)
+        self.r   = (R1c + Z1s) / 2
+        self.S2  = (R1c - Z1s) / 2   # elongation amplitude
+        self.S3  = R2c                # triangularity amplitude
 
-        # Miller: δ = sin(arcsin(δ)) where arcsin(δ) = 2·R2c / R1c
-        angle      = self._safe_div(2.0 * self._R2c, R1c)
-        self.delta = np.where(np.isfinite(angle), np.sin(angle), np.nan)
+        # κ: elongation = Z₁s/R₁c = (r−S₂)/(r+S₂)
+        self.kappa = self._safe_div(self.r - self.S2, self.r + self.S2)
 
-        # Turnbull–Miller squareness: ζ = −Z3s / Z1s
-        self.zeta  = self._safe_div(-self._Z3s, Z1s)
+        # δ: triangularity = 4S₃/r
+        self.delta = self._safe_div(4 * self.S3, self.r)
 
-        # Shafranov shift relative to boundary (positive = outward)
-        self.shift = self._R0c - self._R0c[-1]
+        # Δ: Shafranov shift relative to axis (positive = outward)
+        self.shift = self.R0[0] - R0c
+
+        # F₂: fractional variation of toroidal flux function F = R·Bφ
+        # F(r) = R₀B₀(1 + F₂), so F₂ = bsubvmnc[m=0,n=0] / rbtor0 − 1
+        self.F2 = self._safe_div(self._Fv, self.wout.rbtor0) - 1.0
+
+        # DI: Mercier shape factor
+        self.di = (3/4) * (self.kappa - 1) * (1 - 2 * self._safe_div(self.delta, self.eps))
 
     # ------------------------------------------------------------------
     # Public interface
@@ -164,15 +217,20 @@ class ShapingCoeffs:
         return arr[:, idx[0]].copy()
 
     def as_dict(self):
-        """Return all shaping profiles as a plain dict (s, R0, a, kappa, delta, zeta, shift)."""
+        """Return all shaping profiles as a plain dict."""
         return {
             's':     self.s,
             'R0':    self.R0,
             'a':     self.a,
+            'eps':   self.eps,
+            'r':     self.r,
+            'S2':    self.S2,
+            'S3':    self.S3,
             'kappa': self.kappa,
             'delta': self.delta,
-            'zeta':  self.zeta,
             'shift': self.shift,
+            'F2':    self.F2,
+            'DI':    self.di,
         }
 
     def summary(self, label=None):
@@ -190,12 +248,12 @@ class ShapingCoeffs:
             return ax_s, bd_s
 
         rows = [
-            ('R0  [m]',          *fmt(self.R0)),
-            ('a   [m]',          *fmt(self.a)),
-            ('κ  (elongation)',   *fmt(self.kappa)),
-            ('δ  (triangularity)',*fmt(self.delta)),
-            ('ζ  (squareness)',   *fmt(self.zeta)),
-            ('Δ  (Shafranov) [m]',*fmt(self.shift)),
+            ('R0  [m]',             *fmt(self.R0)),
+            ('κ  (elongation)',     *fmt(self.kappa)),
+            ('δ  (triangularity)',  *fmt(self.delta)),
+            ('Δ  (Shafranov) [m]',  *fmt(self.shift)),
+            ('F₂ (field 2nd harm)', *fmt(self.F2)),
+            ('DI (Mercier mod)',    *fmt(self.di)),
         ]
 
         lines = [
@@ -254,10 +312,6 @@ def elongation(wout):
 def triangularity(wout):
     """Return the δ(s) profile for a WoutReader."""
     return ShapingCoeffs(wout).delta
-
-def squareness(wout):
-    """Return the ζ(s) profile for a WoutReader."""
-    return ShapingCoeffs(wout).zeta
 
 def shafranov_shift(wout):
     """Return the Δ(s) profile for a WoutReader."""
