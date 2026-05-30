@@ -138,13 +138,14 @@ class VmecPlotter:
             R_an, Z_an = sc.reconstruct(self.theta)
 
         # Optionally load VENUS flux surface geometry
-        R_ven = Z_ven = None
+        R_ven = Z_ven = s_ven = None
         if venus is not None:
             import h5py
             with h5py.File(str(venus), 'r') as f:
-                _R0v = float(f['normalisation']['R0'][()])
-                _R   = f['geometry']['R'][()]   # (ntheta_v, ns_v), normalised
-                _Z   = f['geometry']['Z'][()]
+                _R0v  = float(f['normalisation']['R0'][()])
+                _R    = f['geometry']['R'][()]   # (ntheta_v, ns_v), normalised
+                _Z    = f['geometry']['Z'][()]
+                s_ven = f['profiles']['s'][()]   # VENUS radial coord r/a ∈ [0,1]
             # convert to physical metres; shape → (ns_v, ntheta_v) to match VMEC
             R_ven = (_R * _R0v).T
             Z_ven = (_Z * _R0v).T
@@ -168,8 +169,10 @@ class VmecPlotter:
                 )
 
         if R_ven is not None:
-            ns_v = R_ven.shape[0]
-            v_indices = np.round(np.linspace(1, ns_v - 1, n_surfaces)).astype(int)
+            # Match each VMEC surface (at s = √(Φ/Φ_edge)) to the nearest
+            # VENUS surface by its r/a value, so surfaces at the same
+            # normalised flux are compared rather than the same array index.
+            v_indices = np.array([np.argmin(np.abs(s_ven - w.s[i])) for i in indices])
             for i, vidx in enumerate(v_indices):
                 label = 'VENUS' if not _labelled_ven else None
                 _labelled_ven = True
