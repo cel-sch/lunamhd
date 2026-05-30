@@ -113,7 +113,7 @@ class VmecPlotter:
             ShapingCoeffs as dashed lines (same colour) for comparison.
         venus : str or Path, optional
             Path to a VENUS-MHD HDF5 output file.  If given, overlays the
-            VENUS flux surfaces (white dashed lines) for direct comparison.
+            VENUS flux surfaces (cyan dotted lines) for direct comparison.
         """
         w = self.w
         ns = w.ns
@@ -164,7 +164,7 @@ class VmecPlotter:
                 ax.plot(
                     np.append(R_an[idx], R_an[idx, 0]),
                     np.append(Z_an[idx], Z_an[idx, 0]),
-                    '--', color=colour, lw=0.6, alpha=0.7, label=label
+                    '--', color='white', lw=0.8, alpha=0.8, label=label
                 )
 
         if R_ven is not None:
@@ -176,7 +176,7 @@ class VmecPlotter:
                 ax.plot(
                     np.append(R_ven[vidx], R_ven[vidx, 0]),
                     np.append(Z_ven[vidx], Z_ven[vidx, 0]),
-                    '--', color='white', lw=0.6, alpha=0.7, label=label
+                    ':', color='cyan', lw=0.9, alpha=0.85, label=label
                 )
 
         # Axis point (s=0 → single R,Z value from m=0 mode)
