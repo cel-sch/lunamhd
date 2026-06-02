@@ -414,7 +414,7 @@ _FIT_QUANTITIES = {
 }
 
 
-def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True):
+def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
     """
     Fit shaping coefficients as polynomial functions of Mach number M.
 
@@ -437,6 +437,10 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True):
         Polynomial degree in M (default 4).
     plot : bool
         Show a figure with data and fits for each quantity.
+    outpath : str or Path, optional
+        If given, save the fit coefficients to an NPZ file at this path.
+        The file contains arrays '{qty}_coeffs' and '{qty}_perr' for each
+        fitted quantity, readable by RealStability._load_shaping().
 
     Returns
     -------
@@ -516,6 +520,14 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True):
         fig.suptitle(f'Shaping vs Mach  (s-index {s_index})', y=1.01)
         fig.tight_layout()
         plt.show()
+
+    if outpath is not None:
+        save_dict = {}
+        for qty, res in results.items():
+            save_dict[f'{qty}_coeffs'] = res['coeffs']
+            save_dict[f'{qty}_perr']   = res['perr']
+        np.savez(str(outpath), **save_dict)
+        print(f"  → fit coefficients saved to {outpath}")
 
     return results
 
