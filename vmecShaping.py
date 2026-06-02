@@ -54,7 +54,7 @@ Usage as a module
 
 Usage as a script
 -----------------
-    python3 vmecShaping.py my_run                  # all wout files, print + save csv
+    python3 vmecShaping.py my_run                  # all wout files, print + save npz
     python3 vmecShaping.py my_run --index 0        # single file
     python3 vmecShaping.py path/to/wout.nc         # direct path
     python3 vmecShaping.py my_run --fmt npz --outdir ./shaping_out
@@ -193,6 +193,11 @@ class ShapingCoeffs:
         # DI: Mercier shape factor
         self.di = (3/4) * (self.kappa - 1) * (1 - 2 * self._safe_div(self.delta, self.eps))
 
+        # M(s): local Mach number profile, M_0 * omega(s)/omega_axis
+        omega = self.wout.omega.copy()
+        M0 = np.sqrt(max(self.wout.machsq, 0.0))
+        self.mach = M0 * self._safe_div(omega, omega[0]) if omega[0] != 0.0 else np.full(len(self.s), M0)
+
     # ------------------------------------------------------------------
     # Public interface
     # ------------------------------------------------------------------
@@ -256,6 +261,7 @@ class ShapingCoeffs:
             'shift': self.shift,
             'F2':    self.F2,
             'DI':    self.di,
+            'mach':  self.mach,
         }
 
     def summary(self, label=None):
@@ -290,7 +296,7 @@ class ShapingCoeffs:
             lines.append(f"  {label_:<24} {ax_s:>10} {bd_s:>10}")
         return '\n'.join(lines)
 
-    def save(self, outpath=None, fmt='csv'):
+    def save(self, outpath=None, fmt='npz'):
         """
         Save shaping profiles to a file.
 
@@ -347,7 +353,7 @@ def shafranov_shift(wout):
 # Batch processing
 # ---------------------------------------------------------------------------
 
-def compute_shaping(run_name_or_path, index=None, fmt='csv', outdir=None, save=True):
+def compute_shaping(run_name_or_path, index=None, fmt='npz', outdir=None, save=True):
     """
     Compute and optionally save shaping coefficients for one or all wout files.
 
@@ -394,30 +400,166 @@ def compute_shaping(run_name_or_path, index=None, fmt='csv', outdir=None, save=T
 
 
 # ---------------------------------------------------------------------------
+# Mach-scan fitting
+# ---------------------------------------------------------------------------
+
+#: Shaping quantities available for fitting and their display labels.
+_FIT_QUANTITIES = {
+    'kappa': r'$\kappa$',
+    'delta': r'$\delta$',
+    'shift': r'$\Delta$ [m]',
+    'eps':   r'$\varepsilon$',
+    'F2':    r'$F_2$',
+    'DI':    r'$D_I$',
+}
+
+
+def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True):
+    """
+    Fit shaping coefficients as polynomial functions of Mach number M.
+
+    Loads a collection of shaping NPZ files (one per equilibrium), extracts
+    the value of each coefficient at a chosen flux surface, and fits
+
+        quantity(M) = a0 + a1·M + a2·M² + … + an·M^degree
+
+    The x-axis Mach number is always taken from mach[0] (on-axis M₀ = √machsq),
+    independent of s_index.
+
+    Parameters
+    ----------
+    npz_paths : list of str or Path
+        Shaping NPZ files to load (one per equilibrium/Mach number).
+    s_index : int
+        Flux-surface index at which to evaluate shaping quantities. Default 1
+        (near-axis, avoiding the s=0 singularity).
+    degree : int
+        Polynomial degree in M (default 4).
+    plot : bool
+        Show a figure with data and fits for each quantity.
+
+    Returns
+    -------
+    dict mapping quantity name → dict with keys 'coeffs', 'perr', 'mach', 'values'.
+    """
+    from scipy.optimize import curve_fit
+    import matplotlib.pyplot as plt
+
+    # --- load all files ---
+    records = []
+    for p in sorted(npz_paths):
+        d = np.load(str(p))
+        mach_val = float(d['mach'][0]) if 'mach' in d else 0.0
+        records.append((mach_val, d))
+
+    records.sort(key=lambda x: x[0])
+    machs = np.array([r[0] for r in records])
+
+    results = {}
+
+    # --- fit each quantity ---
+    def poly_model(M, *coeffs):
+        return sum(c * M**k for k, c in enumerate(coeffs))
+
+    for qty, label in _FIT_QUANTITIES.items():
+        vals = []
+        for _, d in records:
+            if qty in d:
+                vals.append(float(d[qty][s_index]))
+            else:
+                vals.append(np.nan)
+        vals = np.array(vals)
+
+        mask = np.isfinite(vals) & np.isfinite(machs)
+        if mask.sum() < degree + 1:
+            continue
+
+        p0 = np.zeros(degree + 1)
+        p0[0] = np.nanmean(vals)
+        try:
+            popt, pcov = curve_fit(poly_model, machs[mask], vals[mask], p0=p0)
+            perr = np.sqrt(np.diag(pcov))
+        except RuntimeError:
+            popt = p0
+            perr = np.full_like(p0, np.nan)
+
+        results[qty] = {'coeffs': popt, 'perr': perr, 'mach': machs, 'values': vals}
+
+        terms = [f'{popt[0]:.4f}']
+        for k in range(1, degree + 1):
+            terms.append(f'({popt[k]:+.4f})·M^{k}')
+        print(f"{qty:6s}(M) = {' '.join(terms)}")
+        for k, (c, e) in enumerate(zip(popt, perr)):
+            print(f"       a{k} = {c:.4f} ± {e:.4f}")
+
+    # --- plot ---
+    if plot and results:
+        n = len(results)
+        ncols = min(3, n)
+        nrows = (n + ncols - 1) // ncols
+        fig, axes = plt.subplots(nrows, ncols, figsize=(4.5 * ncols, 3.5 * nrows), squeeze=False)
+
+        M_dense = np.linspace(machs.min(), machs.max(), 200)
+
+        for ax, (qty, res) in zip(axes.flat, results.items()):
+            label = _FIT_QUANTITIES[qty]
+            ax.scatter(res['mach'], res['values'], zorder=3, label='data')
+            ax.plot(M_dense, poly_model(M_dense, *res['coeffs']), label='fit')
+            ax.set_xlabel('M')
+            ax.set_ylabel(label)
+            ax.set_title(label)
+            ax.legend(fontsize=8)
+
+        for ax in axes.flat[len(results):]:
+            ax.set_visible(False)
+
+        fig.suptitle(f'Shaping vs Mach  (s-index {s_index})', y=1.01)
+        fig.tight_layout()
+        plt.show()
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Script entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
     import argparse
+    import glob
 
     parser = argparse.ArgumentParser(
         description='Compute analytic shaping coefficients from VMEC wout files.')
     parser.add_argument('target',
-                        help='Path to wout .nc file, or run name (uses default output root)')
+                        help='Path to wout .nc file, run name, or glob of shaping NPZ files (with --fit)')
     parser.add_argument('--index', type=int, default=None,
                         help='Wout file index (default: all indices for a run name)')
-    parser.add_argument('--fmt', choices=['csv', 'npz'], default='csv',
-                        help='Output file format (default: csv)')
+    parser.add_argument('--fmt', choices=['csv', 'npz'], default='npz',
+                        help='Output file format (default: npz)')
     parser.add_argument('--outdir', default=None,
                         help='Output directory for saved files')
     parser.add_argument('--no-save', action='store_true',
                         help='Print summary only, do not write files')
+    parser.add_argument('--fit', action='store_true',
+                        help='Fit shaping coefficients vs Mach number across a scan')
+    parser.add_argument('--s-index', type=int, default=1,
+                        help='Flux-surface index to evaluate at when fitting (default: 1, near-axis)')
+    parser.add_argument('--degree', type=int, default=4,
+                        help='Polynomial degree in M for fitting (default: 4)')
+    parser.add_argument('--no-plot', action='store_true',
+                        help='Skip the fit plot')
     args = parser.parse_args()
 
-    compute_shaping(
-        args.target,
-        index=args.index,
-        fmt=args.fmt,
-        outdir=args.outdir,
-        save=not args.no_save,
-    )
+    if args.fit:
+        npz_paths = sorted(glob.glob(args.target))
+        if not npz_paths:
+            sys.exit(f"No files matched: {args.target}")
+        fit_shaping_scan(npz_paths, s_index=args.s_index, degree=args.degree, plot=not args.no_plot)
+    else:
+        compute_shaping(
+            args.target,
+            index=args.index,
+            fmt=args.fmt,
+            outdir=args.outdir,
+            save=not args.no_save,
+        )
