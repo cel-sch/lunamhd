@@ -632,10 +632,11 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None, s_value=Non
                 s_v  = f['Grid']['S'][()]          # VENUS radial grid, shape (Nsurf,)
                 R    = f['geometry']['R'][()]       # shape (Ntheta, Nsurf)
             idx = _nearest_idx(s_v, s_value) if s_value is not None else -1
-            R_axis = np.mean(R[:, 0]) * R0        # axis major radius [m]
-            R_surf = np.mean(R[:, idx]) * R0      # poloidal mean R at chosen surface [m]
+            R_axis  = np.mean(R[:, 0]) * R0                          # axis [m]
+            R_col   = R[:, idx] * R0                                  # R values around surface [m]
+            R_center = (R_col.max() + R_col.min()) / 2               # midplane midpoint [m]
             machs_h.append(np.sqrt(max(M02, 0.0)))
-            shifts_h.append(R_axis - R_surf)
+            shifts_h.append(R_axis - R_center)
         if machs_h:
             order = np.argsort(machs_h)
             machs_h  = np.array(machs_h)[order]

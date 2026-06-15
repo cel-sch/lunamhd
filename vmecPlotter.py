@@ -184,7 +184,8 @@ class VmecPlotter:
                 ax.plot(
                     np.append(R_an[idx], R_an[idx, 0]),
                     np.append(Z_an[idx], Z_an[idx, 0]),
-                    '--', color='white', lw=0.8, alpha=0.8, label=label
+                    '--', color='magenta', lw=0.8, alpha=0.9, label=label,
+                    marker='^', markersize=3, markevery=32,
                 )
 
         if R_ven is not None:
@@ -317,7 +318,7 @@ class VmecPlotter:
 # Interactive Mach-number slider
 # ---------------------------------------------------------------------------
 
-def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12):
+def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12, shaping=True, venus='auto'):
     """
     Interactive R-Z flux surface plot with a slider to scrub through all
     Mach numbers in a run.  Wout files are sorted by M (ascending).
@@ -330,11 +331,11 @@ def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12):
         Override the default output root / KH / <run_name> location.
     n_surfaces : int
         Number of flux surfaces to draw per frame.
-
-    Example
-    -------
-    from vmecPlotter import flux_surfaces_slider
-    flux_surfaces_slider('QI_test_bstep0.7')
+    shaping : bool
+        Overlay the analytic circular reconstruction on each frame. Default True.
+    venus : 'auto' or None
+        'auto' (default) finds the matching VENUS h5 for each wout and overlays
+        those flux surfaces. Pass None to disable.
     """
     # --- load & sort ---
     paths = list_wouts(run_name, run_dir=run_dir)
@@ -350,6 +351,35 @@ def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12):
     # --- precompute surface indices (identical for all files) ---
     ns = plotters[0].w.ns
     s_indices = np.round(np.linspace(1, ns - 1, n_surfaces)).astype(int)
+
+    # --- pre-compute analytic reconstructions (one per frame) ---
+    an_data = None
+    if shaping:
+        from vmecShaping import ShapingCoeffs
+        an_data = []
+        for p in plotters:
+            sc = ShapingCoeffs(p.w)
+            R_an, Z_an = sc.reconstruct(p.theta, simple=True)  # (ns, ntheta)
+            an_data.append((R_an, Z_an))
+
+    # --- pre-load VENUS geometry (one per frame) ---
+    ven_data = None
+    if venus == 'auto':
+        import h5py
+        ven_data = []
+        for p in plotters:
+            h5_path = p._guess_venus_h5()
+            if h5_path is None:
+                ven_data.append(None)
+            else:
+                with h5py.File(str(h5_path), 'r') as f:
+                    R0v = float(f['normalisation']['R0'][()])
+                    Rv  = f['geometry']['R'][()].T * R0v   # (ns_v, ntheta_v)
+                    Zv  = f['geometry']['Z'][()].T * R0v
+                    sv  = f['profiles']['s'][()]
+                ven_data.append((Rv, Zv, sv))
+        if all(v is None for v in ven_data):
+            ven_data = None   # nothing found, skip overlay
 
     # --- fixed R/Z axis limits (use outermost surface across all files) ---
     all_R = np.concatenate([p.R[s_indices[-1]] for p in plotters])
@@ -382,7 +412,7 @@ def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12):
     B_max  = B_mean[s_indices].max()
     norm0  = plt.Normalize(B_min, B_max)
 
-    # one Line2D per flux surface + one for the magnetic axis marker
+    # VMEC flux surfaces
     lines = []
     for si in s_indices:
         R_closed = np.append(p0.R[si], p0.R[si, 0])
@@ -391,6 +421,39 @@ def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12):
         lines.append(line)
     axis_marker, = ax.plot(p0.w.rmnc[0, 0], p0.w.zmns[0, 0],
                            '+', color='black', ms=7, mew=1.5)
+
+    # analytic circular overlay
+    an_lines = []
+    if an_data is not None:
+        R_an0, Z_an0 = an_data[0]
+        for i, si in enumerate(s_indices):
+            label = 'analytic (circular)' if i == 0 else None
+            line, = ax.plot(
+                np.append(R_an0[si], R_an0[si, 0]),
+                np.append(Z_an0[si], Z_an0[si, 0]),
+                '--', color='magenta', lw=0.8, alpha=0.9, label=label,
+                marker='^', markersize=3, markevery=32,
+            )
+            an_lines.append(line)
+
+    # VENUS overlay
+    ven_lines = []
+    if ven_data is not None:
+        vd0 = next(v for v in ven_data if v is not None)
+        Rv0, Zv0, sv0 = vd0
+        v_indices = np.array([np.argmin(np.abs(sv0 - plotters[0].w.s[i]))
+                               for i in s_indices])
+        for i, vidx in enumerate(v_indices):
+            label = 'VENUS' if i == 0 else None
+            line, = ax.plot(
+                np.append(Rv0[vidx], Rv0[vidx, 0]),
+                np.append(Zv0[vidx], Zv0[vidx, 0]),
+                ':', color='cyan', lw=0.9, alpha=0.85, label=label,
+            )
+            ven_lines.append(line)
+
+    if an_lines or ven_lines:
+        ax.legend(fontsize=7, loc='lower right')
 
     ax.set_xlim(*R_lim)
     ax.set_ylim(*Z_lim)
@@ -425,6 +488,19 @@ def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12):
 
         axis_marker.set_xdata([p.w.rmnc[0, 0]])
         axis_marker.set_ydata([p.w.zmns[0, 0]])
+
+        if an_lines:
+            R_an, Z_an = an_data[idx]
+            for line, si in zip(an_lines, s_indices):
+                line.set_xdata(np.append(R_an[si], R_an[si, 0]))
+                line.set_ydata(np.append(Z_an[si], Z_an[si, 0]))
+
+        if ven_lines and ven_data[idx] is not None:
+            Rv, Zv, sv = ven_data[idx]
+            v_idx_cur = np.array([np.argmin(np.abs(sv - p.w.s[i])) for i in s_indices])
+            for line, vidx in zip(ven_lines, v_idx_cur):
+                line.set_xdata(np.append(Rv[vidx], Rv[vidx, 0]))
+                line.set_ydata(np.append(Zv[vidx], Zv[vidx, 0]))
 
         sm.set_clim(B_min, B_max)
         cbar.update_normal(sm)
