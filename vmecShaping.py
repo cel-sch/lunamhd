@@ -562,9 +562,14 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None, s_value=Non
     VMEC data is read from shaping NPZ files produced by compute_shaping().
     VENUS data is read directly from the stability h5 files written by Stability.Saveh5().
 
-    The VENUS shift is Δ = (⟨R⟩_axis − ⟨R⟩_s) × R₀, where ⟨R⟩_s is the
-    poloidal mean of the normalised R coordinate at the chosen flux surface.
-    This matches the VMEC convention: Δ(s) = R₀(s=0) − R₀(s).
+    Both codes plot Δ/R₀ (dimensionless Shafranov shift) and ε² (squared inverse
+    aspect ratio) against on-axis Mach number.
+
+    The VENUS shift Δ/R₀ = ⟨R⟩_axis − R_mid(s), where R_mid = (R_max + R_min)/2
+    at the chosen surface (coordinate-independent midplane midpoint, normalised by R₀).
+    The VENUS ε = (R_max − R_min)/(2 ⟨R⟩_axis) at the chosen surface.
+    This matches the VMEC convention: Δ/R₀(s) = [R₀(0) − R₀(s)] / R₀(0),
+    and ε(s) = a(s)/R₀(s) from the Fourier m=0,1 coefficients.
 
     VMEC and VENUS use different radial grids (different resolution and bunching),
     so a physical s value is used to locate the right point in each grid independently.
@@ -603,51 +608,60 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None, s_value=Non
     # --- VMEC ---
     if vmec_npz_paths:
         vmec_npz_paths = [Path(p).expanduser() for p in vmec_npz_paths]
-        machs_v, shifts_v = [], []
+        machs_v, shifts_v, epssq_v = [], [], []
         for p in vmec_npz_paths:
             d = np.load(str(p))
-            if 'mach' not in d or 'shift' not in d or 's' not in d:
-                print(f"  VMEC: skipping {p.name} — missing 'mach', 'shift', or 's'")
+            if not {'mach', 'shift', 's', 'R0', 'eps'}.issubset(d.files):
+                print(f"  VMEC: skipping {p.name} — missing required key(s)")
                 continue
             idx = _nearest_idx(d['s'], s_value) if s_value is not None else -1
+            R0_axis = float(d['R0'][0])
             machs_v.append(float(d['mach'][0]))
-            shifts_v.append(float(d['shift'][idx]))
+            shifts_v.append(float(d['shift'][idx]) / R0_axis)
+            epssq_v.append(float(d['eps'][idx])**2)
         if machs_v:
             order = np.argsort(machs_v)
             machs_v  = np.array(machs_v)[order]
             shifts_v = np.array(shifts_v)[order]
-            ax.plot(machs_v, shifts_v, 'o-', label='VMEC')
+            epssq_v  = np.array(epssq_v)[order]
+            ax.plot(machs_v, shifts_v, 'o-',  label=r'VMEC $\Delta/R_0$')
+            ax.plot(machs_v, epssq_v,  'o--', label=r'VMEC $\varepsilon^2$')
             print(f"VMEC: {len(machs_v)} points, "
                   f"M ∈ [{machs_v.min():.3f}, {machs_v.max():.3f}], "
-                  f"Δ ∈ [{shifts_v.min():.4f}, {shifts_v.max():.4f}] m")
+                  f"Δ/R₀ ∈ [{shifts_v.min():.4f}, {shifts_v.max():.4f}], "
+                  f"ε² ∈ [{epssq_v.min():.4f}, {epssq_v.max():.4f}]")
 
     # --- VENUS-MHD ---
     if venus_h5_paths:
         venus_h5_paths = [Path(p).expanduser() for p in venus_h5_paths]
-        machs_h, shifts_h = [], []
+        machs_h, shifts_h, epssq_h = [], [], []
         for p in venus_h5_paths:
             with h5py.File(str(p), 'r') as f:
                 M02  = float(f['normalisation']['M02'][()])
-                R0   = float(f['normalisation']['R0'][()])
                 s_v  = f['Grid']['S'][()]          # VENUS radial grid, shape (Nsurf,)
-                R    = f['geometry']['R'][()]       # shape (Ntheta, Nsurf)
+                R    = f['geometry']['R'][()]       # shape (Ntheta, Nsurf), normalised by R0
             idx = _nearest_idx(s_v, s_value) if s_value is not None else -1
-            R_axis  = np.mean(R[:, 0]) * R0                          # axis [m]
-            R_col   = R[:, idx] * R0                                  # R values around surface [m]
-            R_center = (R_col.max() + R_col.min()) / 2               # midplane midpoint [m]
+            R_axis_n  = np.mean(R[:, 0])                              # normalised axis R
+            R_col_n   = R[:, idx]                                     # normalised R at chosen surface
+            R_center_n = (R_col_n.max() + R_col_n.min()) / 2
+            eps_venus  = (R_col_n.max() - R_col_n.min()) / 2 / R_axis_n
             machs_h.append(np.sqrt(max(M02, 0.0)))
-            shifts_h.append(R_axis - R_center)
+            shifts_h.append(R_axis_n - R_center_n)                   # Δ/R₀ (dimensionless)
+            epssq_h.append(eps_venus**2)
         if machs_h:
             order = np.argsort(machs_h)
             machs_h  = np.array(machs_h)[order]
             shifts_h = np.array(shifts_h)[order]
-            ax.plot(machs_h, shifts_h, 's--', label='VENUS-MHD')
+            epssq_h  = np.array(epssq_h)[order]
+            ax.plot(machs_h, shifts_h, 's-',  label=r'VENUS $\Delta/R_0$')
+            ax.plot(machs_h, epssq_h,  's--', label=r'VENUS $\varepsilon^2$')
             print(f"VENUS: {len(machs_h)} points, "
                   f"M ∈ [{machs_h.min():.3f}, {machs_h.max():.3f}], "
-                  f"Δ ∈ [{shifts_h.min():.4f}, {shifts_h.max():.4f}] m")
+                  f"Δ/R₀ ∈ [{shifts_h.min():.4f}, {shifts_h.max():.4f}], "
+                  f"ε² ∈ [{epssq_h.min():.4f}, {epssq_h.max():.4f}]")
 
     ax.set_xlabel(r'$\mathcal{M}$')
-    ax.set_ylabel(r'$\Delta$ [m]')
+    ax.set_ylabel(r'$\Delta/R_0,\ \varepsilon^2$')
     ax.set_title(f'Shafranov shift vs Mach  ({s_label})')
     ax.legend()
     fig.tight_layout()
