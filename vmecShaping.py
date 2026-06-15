@@ -171,9 +171,9 @@ class ShapingCoeffs:
         Z1s = self._Z1s.copy()
 
         self.R0  = R0c
-        self.a   = R1c
-        self.eps = self._safe_div(self.a, self.R0)
         self.r   = (R1c + Z1s) / 2
+        # self.a = R1c?
+        self.eps = self._safe_div(self.r, self.R0)
         self.S2  = (R1c - Z1s) / 2   # elongation amplitude
         self.S3  = R2c                # triangularity amplitude
 
@@ -202,17 +202,25 @@ class ShapingCoeffs:
     # Public interface
     # ------------------------------------------------------------------
 
-    def reconstruct(self, theta):
+    def reconstruct(self, theta, simple=True):
         """
-        Reconstruct R(θ) and Z(θ) analytically from the m=0,1,2 Graves shaping
-        coefficients (truncated Fourier expansion, Appendix B1).
+        Reconstruct R(θ) and Z(θ) analytically from the Graves shaping coefficients.
 
+        simple=True (default) — circular cross-section only, no elongation (S₂) or
+            triangularity (S₃).  Matches the analytic parameterisation
+                R = R₀ + r·cos θ
+                Z = r·sin θ
+            where R₀(s) already carries the Shafranov shift (it is the m=0
+            Fourier component of R from VMEC, so R₀(s) = R₀_axis − Δ(s)).
+
+        simple=False — full m=0,1,2 Graves expansion (Appendix B1):
             R(s,θ) = R₀ + (r + S₂)·cos θ + S₃·cos 2θ
             Z(s,θ) =      (r − S₂)·sin θ
 
         Parameters
         ----------
-        theta : 1-D array, shape (ntheta,)
+        theta  : 1-D array, shape (ntheta,)
+        simple : bool
 
         Returns
         -------
@@ -220,11 +228,15 @@ class ShapingCoeffs:
         """
         R0 = self.R0[:, np.newaxis]
         r  = self.r[:, np.newaxis]
-        S2 = self.S2[:, np.newaxis]
-        S3 = self.S3[:, np.newaxis]
 
-        R = R0 + (r + S2) * np.cos(theta) + S3 * np.cos(2 * theta)
-        Z =      (r - S2) * np.sin(theta)
+        if simple:
+            R = R0 + r * np.cos(theta)
+            Z = r  * np.sin(theta)
+        else:
+            S2 = self.S2[:, np.newaxis]
+            S3 = self.S3[:, np.newaxis]
+            R = R0 + (r + S2) * np.cos(theta) + S3 * np.cos(2 * theta)
+            Z =      (r - S2) * np.sin(theta)
         return R, Z
 
     def get_mode(self, coeff, m, n=0):
@@ -251,7 +263,6 @@ class ShapingCoeffs:
         return {
             's':     self.s,
             'R0':    self.R0,
-            'a':     self.a,
             'eps':   self.eps,
             'r':     self.r,
             'S2':    self.S2,
@@ -450,11 +461,18 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
     import matplotlib.pyplot as plt
 
     # --- load all files ---
+    npz_paths = [Path(p).expanduser() for p in npz_paths]
     records = []
     for p in sorted(npz_paths):
         d = np.load(str(p))
         mach_val = float(d['mach'][0]) if 'mach' in d else 0.0
         records.append((mach_val, d))
+
+    if not records:
+        print("fit_shaping_scan: no NPZ files loaded — check the path and that compute_shaping has been run.")
+        return {}
+
+    print(f"fit_shaping_scan: loaded {len(records)} files, M range [{min(r[0] for r in records):.3f}, {max(r[0] for r in records):.3f}]")
 
     records.sort(key=lambda x: x[0])
     machs = np.array([r[0] for r in records])
@@ -476,6 +494,7 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
 
         mask = np.isfinite(vals) & np.isfinite(machs)
         if mask.sum() < degree + 1:
+            print(f"  {qty}: skipped — only {mask.sum()} finite points, need {degree + 1} for degree-{degree} fit")
             continue
 
         p0 = np.zeros(degree + 1)
@@ -533,6 +552,109 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
 
 
 # ---------------------------------------------------------------------------
+# Shafranov shift vs Mach comparison plot (VMEC + VENUS-MHD)
+# ---------------------------------------------------------------------------
+
+def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None, s_value=None, ax=None):
+    """
+    Plot the Shafranov shift vs on-axis Mach number from VMEC and/or VENUS-MHD.
+
+    VMEC data is read from shaping NPZ files produced by compute_shaping().
+    VENUS data is read directly from the stability h5 files written by Stability.Saveh5().
+
+    The VENUS shift is Δ = (⟨R⟩_axis − ⟨R⟩_s) × R₀, where ⟨R⟩_s is the
+    poloidal mean of the normalised R coordinate at the chosen flux surface.
+    This matches the VMEC convention: Δ(s) = R₀(s=0) − R₀(s).
+
+    VMEC and VENUS use different radial grids (different resolution and bunching),
+    so a physical s value is used to locate the right point in each grid independently.
+
+    Parameters
+    ----------
+    vmec_npz_paths : list of str or Path, optional
+        Shaping NPZ files (one per VMEC equilibrium / Mach value).
+    venus_h5_paths : list of str or Path, optional
+        VENUS stability h5 files (one per run point).
+    s_value : float or None
+        Normalised flux label s ∈ [0, 1] at which to evaluate the shift. Each
+        grid is searched independently for its nearest point. Default None uses
+        the outermost point in each grid (s → 1, i.e. the boundary).
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot into. A new figure is created if None.
+
+    Returns
+    -------
+    fig, ax
+    """
+    import h5py
+    import matplotlib.pyplot as plt
+
+    def _nearest_idx(s_arr, s_target):
+        """Index of the grid point nearest to s_target."""
+        return int(np.argmin(np.abs(s_arr - s_target)))
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(5, 4))
+    else:
+        fig = ax.get_figure()
+
+    s_label = f's = {s_value:.3f}' if s_value is not None else 'outermost surface'
+
+    # --- VMEC ---
+    if vmec_npz_paths:
+        vmec_npz_paths = [Path(p).expanduser() for p in vmec_npz_paths]
+        machs_v, shifts_v = [], []
+        for p in vmec_npz_paths:
+            d = np.load(str(p))
+            if 'mach' not in d or 'shift' not in d or 's' not in d:
+                print(f"  VMEC: skipping {p.name} — missing 'mach', 'shift', or 's'")
+                continue
+            idx = _nearest_idx(d['s'], s_value) if s_value is not None else -1
+            machs_v.append(float(d['mach'][0]))
+            shifts_v.append(float(d['shift'][idx]))
+        if machs_v:
+            order = np.argsort(machs_v)
+            machs_v  = np.array(machs_v)[order]
+            shifts_v = np.array(shifts_v)[order]
+            ax.plot(machs_v, shifts_v, 'o-', label='VMEC')
+            print(f"VMEC: {len(machs_v)} points, "
+                  f"M ∈ [{machs_v.min():.3f}, {machs_v.max():.3f}], "
+                  f"Δ ∈ [{shifts_v.min():.4f}, {shifts_v.max():.4f}] m")
+
+    # --- VENUS-MHD ---
+    if venus_h5_paths:
+        venus_h5_paths = [Path(p).expanduser() for p in venus_h5_paths]
+        machs_h, shifts_h = [], []
+        for p in venus_h5_paths:
+            with h5py.File(str(p), 'r') as f:
+                M02  = float(f['normalisation']['M02'][()])
+                R0   = float(f['normalisation']['R0'][()])
+                s_v  = f['Grid']['S'][()]          # VENUS radial grid, shape (Nsurf,)
+                R    = f['geometry']['R'][()]       # shape (Ntheta, Nsurf)
+            idx = _nearest_idx(s_v, s_value) if s_value is not None else -1
+            R_axis = np.mean(R[:, 0]) * R0        # axis major radius [m]
+            R_surf = np.mean(R[:, idx]) * R0      # poloidal mean R at chosen surface [m]
+            machs_h.append(np.sqrt(max(M02, 0.0)))
+            shifts_h.append(R_axis - R_surf)
+        if machs_h:
+            order = np.argsort(machs_h)
+            machs_h  = np.array(machs_h)[order]
+            shifts_h = np.array(shifts_h)[order]
+            ax.plot(machs_h, shifts_h, 's--', label='VENUS-MHD')
+            print(f"VENUS: {len(machs_h)} points, "
+                  f"M ∈ [{machs_h.min():.3f}, {machs_h.max():.3f}], "
+                  f"Δ ∈ [{shifts_h.min():.4f}, {shifts_h.max():.4f}] m")
+
+    ax.set_xlabel(r'$\mathcal{M}$')
+    ax.set_ylabel(r'$\Delta$ [m]')
+    ax.set_title(f'Shafranov shift vs Mach  ({s_label})')
+    ax.legend()
+    fig.tight_layout()
+    plt.show()
+    return fig, ax
+
+
+# ---------------------------------------------------------------------------
 # Script entry point
 # ---------------------------------------------------------------------------
 
@@ -542,7 +664,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
         description='Compute analytic shaping coefficients from VMEC wout files.')
-    parser.add_argument('target',
+    parser.add_argument('target', nargs='?', default=None,
                         help='Path to wout .nc file, run name, or glob of shaping NPZ files (with --fit)')
     parser.add_argument('--index', type=int, default=None,
                         help='Wout file index (default: all indices for a run name)')
@@ -554,20 +676,45 @@ if __name__ == '__main__':
                         help='Print summary only, do not write files')
     parser.add_argument('--fit', action='store_true',
                         help='Fit shaping coefficients vs Mach number across a scan')
+    parser.add_argument('--s-value', type=float, default=None,
+                        help='(--shafranov) Normalised flux label s ∈ [0,1] at which to '
+                             'evaluate Δ. Each grid is searched independently. '
+                             'Default: outermost point in each grid.')
     parser.add_argument('--s-index', type=int, default=1,
-                        help='Flux-surface index to evaluate at when fitting (default: 1, near-axis)')
+                        help='(--fit) Flux-surface array index for fit_shaping_scan '
+                             '(default: 1, near-axis). Not used by --shafranov.')
     parser.add_argument('--degree', type=int, default=4,
                         help='Polynomial degree in M for fitting (default: 4)')
     parser.add_argument('--no-plot', action='store_true',
                         help='Skip the fit plot')
+    parser.add_argument('--shafranov', action='store_true',
+                        help='Plot Shafranov shift vs Mach number comparing VMEC and VENUS-MHD')
+    parser.add_argument('--vmec-npz', default=None,
+                        help='Glob of VMEC shaping NPZ files for --shafranov (e.g. "run/wout/*_shaping.npz")')
+    parser.add_argument('--venus-h5', default=None,
+                        help='Glob of VENUS stability h5 files for --shafranov (e.g. "run/*.h5")')
     args = parser.parse_args()
 
-    if args.fit:
+    if args.shafranov:
+        vmec_paths  = sorted(glob.glob(args.vmec_npz))  if args.vmec_npz  else []
+        venus_paths = sorted(glob.glob(args.venus_h5))  if args.venus_h5  else []
+        if not vmec_paths and not venus_paths:
+            sys.exit("Provide at least one of --vmec-npz or --venus-h5")
+        plot_shafranov_vs_mach(
+            vmec_npz_paths=vmec_paths or None,
+            venus_h5_paths=venus_paths or None,
+            s_value=args.s_value,
+        )
+    elif args.fit:
+        if not args.target:
+            sys.exit("Provide a glob target for --fit")
         npz_paths = sorted(glob.glob(args.target))
         if not npz_paths:
             sys.exit(f"No files matched: {args.target}")
-        fit_shaping_scan(npz_paths, s_index=args.s_index, degree=args.degree, plot=not args.no_plot)
+        fit_shaping_scan(npz_paths, s_index=args.s_index, degree=args.degree, plot=not args.no_plot)  # noqa: E501
     else:
+        if not args.target:
+            sys.exit("Provide a target (wout path or run name)")
         compute_shaping(
             args.target,
             index=args.index,

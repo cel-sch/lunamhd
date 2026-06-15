@@ -98,23 +98,42 @@ class VmecPlotter:
         # |B|(s, θ) from bmnc (Nyquist-grid modes)
         self.B = _reconstruct_cos(theta, w.bmnc, w.xm_nyq, w.xn_nyq)  # (ns, ntheta)
 
+    def _guess_venus_h5(self):
+        """Infer the VENUS h5 path from the wout path, return None if not found.
+
+        Assumes the layout produced by lunaScanner:
+            wout:  <run_dir>/VMEC/wout/wout_<run_name>_<idx>.nc
+            venus: <run_dir>/<run_name>_<idx>.h5
+        """
+        p = self.w.path
+        if not p.stem.startswith('wout_'):
+            return None
+        rest = p.stem[len('wout_'):]          # <run_name>_<idx>
+        run_name, idx = rest.rsplit('_', 1)   # split off trailing index
+        run_dir = p.parent.parent.parent      # up from VMEC/wout/
+        candidate = run_dir / f'{run_name}_{idx}.h5'
+        return candidate if candidate.exists() else None
+
     # -----------------------------------------------------------------------
     # Plot 1: flux surfaces in R-Z, coloured by |B| on each surface
     # -----------------------------------------------------------------------
     def flux_surfaces(self, n_surfaces=12, ax=None, show=True, title=None,
-                      shaping=False, venus=None):
+                      shaping=True, venus='auto'):
         """
         R-Z cross-section with flux surface contours.
         Surfaces are evenly spaced in s ∈ (0,1], skipping the axis.
         Contour colour = mean |B| on each surface.
 
         shaping : bool
-            If True, overlay the analytic Graves m=0,1,2 reconstruction from
-            ShapingCoeffs as dashed lines (same colour) for comparison.
-        venus : str or Path, optional
-            Path to a VENUS-MHD HDF5 output file.  If given, overlays the
-            VENUS flux surfaces (cyan dotted lines) for direct comparison.
+            Overlay the analytic circular reconstruction (R₀ + r·cosθ, r·sinθ)
+            as dashed lines.  Default True.
+        venus : str, Path, or 'auto'
+            Path to a VENUS-MHD HDF5 output file for a flux surface overlay.
+            'auto' (default) tries to find the matching h5 alongside the wout
+            file; pass None to disable.
         """
+        if venus == 'auto':
+            venus = self._guess_venus_h5()
         w = self.w
         ns = w.ns
 
@@ -160,7 +179,7 @@ class VmecPlotter:
                 color=colour, lw=0.8
             )
             if R_an is not None:
-                label = 'Graves analytic (m≤2)' if not _labelled_an else None
+                label = 'analytic (circular)' if not _labelled_an else None
                 _labelled_an = True
                 ax.plot(
                     np.append(R_an[idx], R_an[idx, 0]),
