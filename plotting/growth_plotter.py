@@ -284,4 +284,4 @@ class plot_growth(object):
             self.ax.legend()
             self.ax.legend_.set_visible(self['visible']['legend'])
         
-        self.fig.canvas.draw_idle()
+        self.fig.canvas.draw()

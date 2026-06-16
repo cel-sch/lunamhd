@@ -1,32 +1,34 @@
 &fixed_params
    profile = 'all_step'
    mach = 0
-   omega_avg = 1.5
+   omega_avg = 2.5
    omega_step = 0.5
    rho_avg = 1
    rho_step = 0
-   beta_avg = 0.005
-   beta_step = 0.002
+   beta_avg = 0.018
+   beta_step = 0.7
    rmaj = 10
    a = 1
    n = -1
-   rationalm = 2
+   rationalm = 1
    sidebands = 5
    b0 = 1
    rs = 0
    qs = 2
-   delq = 0.1
+   delq = 0.01
    nu_q = 8
    nu_n = 6
    drstep = 0.15
-   init_evguess = 1.8
-   grid_res = 100
+   init_evguess = 0.7
+   venus_n = 200
 /
 
 &initialisers
    run_vmec = .true.
    run_venus = .true.
    peakedness = .false.
+   step_frac = .true.
+   om_rho_link = .true.
    ev_guess_type = 'last_ev'
    mode_type = 'KH'
    vmec_ver = 9
@@ -34,16 +36,15 @@
 /
 
 &info
-   runid = 'as_omstep_EVbugfixnochange'
-   description = 'rerunning as_omstep_lowbeta2 to test the EV>1 bugfix'
-   datetime = '10-02-25_17:08'
+   runid = 'QI_bstep0.7_omstep0.5'
+   description = ''
+   datetime = '06-05-26_18:56'
 /
 
 &scanparam_0
    paramkey = 'omega_step'
-   nodes = 1, 1.1
-   nsteps = 1
+   nodes = 0, 1
+   nsteps = 14
    vals = ,
    descending = .true.
 /
-
