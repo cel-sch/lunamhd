@@ -152,8 +152,8 @@ class plot_multi(object):
         self.ax.grid()
         
         ion()
-        show()
         self.draw_fig()
+        show()
 
     def _make_scan_loop(self, reader):
         # scan_specs format e.g.: {'Omega':[1,2,3], 'beta':0.5}
@@ -267,8 +267,8 @@ class plot_multi(object):
             print("ERROR: axis_type not found, valid types: ['gam', 'wr']. Determines whether growth rate or real frequency is plotted.")
             return
         
-        # load eigenvalue only for lunamhd, DE and AE eigenvalues for AEmhd
-        if type(reader) == AEmhd.Reader.AEread:
+        # load eigenvalue only for lunamhd, DE and AE eigenvalues for plutomhd
+        if type(reader) == plutomhd.Reader.plutoread:
             self.ykeys[f'{reader}'] = ['EV', 'a_EV']
         elif type(reader) == lunamhd.lunaReader.lunaRead:
             self.ykeys[f'{reader}'] = 'EV'
@@ -292,15 +292,15 @@ class plot_multi(object):
             else:
                 if type(reader) == lunamhd.lunaReader.lunaRead:
                     rotkey = 'omegahat'
-                elif type(reader) == AEmhd.Reader.AEread: 
+                elif type(reader) == plutomhd.Reader.plutoread: 
                     rotkey = 'omega' 
         elif axis_type in ['mach0']:
-            if type(reader) == AEmhd.Reader.AEread: 
+            if type(reader) == plutomhd.Reader.plutoread: 
                 rotkey = 'mach0'
             elif type(reader) == lunamhd.lunaReader.lunaRead:
                 rotkey = 'mach'
         elif axis_type in ['mach1']:
-            if type(reader) == AEmhd.Reader.AEread: 
+            if type(reader) == plutomhd.Reader.plutoread: 
                 rotkey = 'mach1'
             elif type(reader) == lunamhd.lunaReader.lunaRead:
                 rotkey = 'mach'
@@ -370,7 +370,7 @@ class plot_multi(object):
         elif self['x_axis_type'] == 'peakedness_anal':
             x_vals = reader.get_1d_list(self.scankeys[f'{reader}'], 'peakedness_anal', spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
         elif self['x_axis_type'] == 'xstep_norm':
-            if type(reader) == AEmhd.Reader.AEread:
+            if type(reader) == plutomhd.Reader.plutoread:
                 x_step = reader.get_1d_list(self.initparams[f'{reader}'], f"{self.xkeys[f'{reader}']}_step", spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
                 x_avg = reader.get_1d_list(self.initparams[f'{reader}'], f"{self.xkeys[f'{reader}']}_avg", spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False) # i think this returns an array even if x_avg is constant?
             elif type(reader) == lunamhd.lunaReader.lunaRead:
@@ -405,7 +405,7 @@ class plot_multi(object):
             # elif self.scankeys[f'{reader}'] == 'mach' and self['rot_axis_type'] in ['omega', 'Omega']: # Change x_vals from mach to omegahat if needed, probably broken but i am not fixing this rn
             #     _, x_vals = reader.get_1d_list(scanparam=self.scankeys[f'{reader}'], variable=self.xkeys[f'{reader}'], paramSpecs=scan)
             
-        elif type(reader) == AEmhd.Reader.AEread:         
+        elif type(reader) == plutomhd.Reader.plutoread:         
             if reader.info['scantype'] == 'full':
                 y_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][0], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
                 asy_vals = reader.get_1d_list(self.scankeys[f'{reader}'], self.ykeys[f'{reader}'][1], spar_list = self.spar_lists[f'{reader}'],  paramSpecs = scan, _returnBoth = False)
@@ -458,7 +458,7 @@ class plot_multi(object):
                 # if self.scanlabel == 'VENUS-MHD (2,1)':
                 #     self.ax.plot(x_vals[:-1], gam_vals[:-1], lstyle, label=f'{self.scanlabel}', markersize=self['markersize'], markevery=markfreq)
                 self.ax.plot(x_vals[pstart:pstop], gam_vals[pstart:pstop], lstyle, label=f'{self.scanlabel}', markersize=self['markersize'], markevery=markfreq)
-            elif type(reader) == AEmhd.Reader.AEread:
+            elif type(reader) == plutomhd.Reader.plutoread:
                 if self['AE_visible']['gam']:
                     x_vals, gam_vals, _ = self._load_data(reader = reader, scan = scan)
                     self.ax.plot(x_vals[pstart:pstop], gam_vals[pstart:pstop], lstyle, label=f'{self.scanlabel}', markersize=self['markersize'], markevery=markfreq)
