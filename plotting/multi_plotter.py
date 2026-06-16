@@ -10,7 +10,7 @@ from textwrap import wrap
 from numpy import sqrt, loadtxt, float64, pi, linspace
 from pathlib import Path
 
-from matplotlib.pyplot import subplots, show, ion, axes, tight_layout
+from matplotlib.pyplot import subplots, show, axes, tight_layout
 from matplotlib.widgets import Slider, Button
 
 import plutomhd
@@ -151,7 +151,6 @@ class plot_multi(object):
         # if self['visible']['grid']:
         self.ax.grid()
         
-        ion()
         self.draw_fig()
         show()
 
@@ -489,4 +488,4 @@ class plot_multi(object):
             self.ax.legend(loc=self['legend_loc'])
             self.ax.legend_.set_visible(self['visible']['legend'])
         
-        self.fig.canvas.draw_idle()
+        self.fig.canvas.draw()
