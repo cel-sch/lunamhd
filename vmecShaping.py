@@ -555,21 +555,29 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
 # Shafranov shift vs Mach comparison plot (VMEC + VENUS-MHD)
 # ---------------------------------------------------------------------------
 
-def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None, s_value=None, ax=None):
+def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
+                           pluto_reader=None, pluto_scanparam=None, pluto_paramspecs=None,
+                           s_value=None, ax=None):
     """
-    Plot the Shafranov shift vs on-axis Mach number from VMEC and/or VENUS-MHD.
+    Plot the Shafranov shift vs on-axis Mach number from VMEC, VENUS-MHD, and/or PlutoMHD.
 
     VMEC data is read from shaping NPZ files produced by compute_shaping().
     VENUS data is read directly from the stability h5 files written by Stability.Saveh5().
+    PlutoMHD data is read via plutomhd.Reader.plutoread and the analytic shaf() formula.
 
-    Both codes plot Δ/R₀ (dimensionless Shafranov shift) and ε² (squared inverse
-    aspect ratio) against on-axis Mach number.
+    Both VMEC and VENUS plot Δ/R₀ (dimensionless Shafranov shift) and ε² (squared inverse
+    aspect ratio) against on-axis Mach number.  PlutoMHD plots Δ/R₀ only (ε² is a fixed
+    geometric quantity in the circular step model).
 
     The VENUS shift Δ/R₀ = ⟨R⟩_axis − R_mid(s), where R_mid = (R_max + R_min)/2
     at the chosen surface (coordinate-independent midplane midpoint, normalised by R₀).
     The VENUS ε = (R_max − R_min)/(2 ⟨R⟩_axis) at the chosen surface.
     This matches the VMEC convention: Δ/R₀(s) = [R₀(0) − R₀(s)] / R₀(0),
     and ε(s) = a(s)/R₀(s) from the Fourier m=0,1 coefficients.
+
+    For PlutoMHD, the analytic Shafranov shift from plutorlstab.shaf() is evaluated at
+    r = sqrt(s_value) (using s ≈ (r/a)² for circular surfaces) and normalised as
+    Δ/R₀ = shaf(r) * eps_a, where shaf is in units of the minor radius a.
 
     VMEC and VENUS use different radial grids (different resolution and bunching),
     so a physical s value is used to locate the right point in each grid independently.
@@ -580,6 +588,16 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None, s_value=Non
         Shaping NPZ files (one per VMEC equilibrium / Mach value).
     venus_h5_paths : list of str or Path, optional
         VENUS stability h5 files (one per run point).
+    pluto_reader : plutoread object, str, or Path, optional
+        A plutomhd.Reader.plutoread instance, or the full path to a PlutoMHD .npz
+        data file (e.g. ``/path/to/Output/myrun/myrun.npz``).
+    pluto_scanparam : str, optional
+        Name of the scan parameter that sweeps Mach number (e.g. ``'omega0'`` or
+        ``'omega_avg'``).  Auto-detected from the first entry of info['scanorder']
+        if not given.
+    pluto_paramspecs : dict, optional
+        Fixed parameter values used to select a slice of a multi-dimensional
+        PlutoMHD scan (e.g. ``{'omega_step': 0.0}``).
     s_value : float or None
         Normalised flux label s ∈ [0, 1] at which to evaluate the shift. Each
         grid is searched independently for its nearest point. Default None uses
@@ -660,6 +678,47 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None, s_value=Non
                   f"Δ/R₀ ∈ [{shifts_h.min():.4f}, {shifts_h.max():.4f}], "
                   f"ε² ∈ [{epssq_h.min():.4f}, {epssq_h.max():.4f}]")
 
+    # --- PlutoMHD analytic ---
+    if pluto_reader is not None:
+        try:
+            from plutomhd.Reader import plutoread
+        except ImportError:
+            sys.exit("plutomhd package not found; ensure it is on the Python path")
+
+        if not isinstance(pluto_reader, plutoread):
+            p = Path(pluto_reader).expanduser()
+            reader = plutoread(p.stem, filePath=p.parent)
+        else:
+            reader = pluto_reader
+
+        if pluto_scanparam is None:
+            pluto_scanparam = reader.info['scanorder'][0]
+
+        spar_list = reader.info['scanparams'][pluto_scanparam]
+        base_specs = dict(pluto_paramspecs or {})
+        r_eval = np.array([np.sqrt(s_value)]) if s_value is not None else np.array([1.0])
+
+        machs_p, shifts_p = [], []
+        for spar in spar_list:
+            paramSpecs = {**base_specs, pluto_scanparam: spar}
+            shaf_arr, _, _ = reader.get_shaf(paramSpecs, r=r_eval)
+            if shaf_arr is None:
+                continue
+            mach0 = reader('mach0', paramSpecs)
+            eps_a = reader('eps_a', paramSpecs)
+            if mach0 is None or eps_a is None:
+                continue
+            machs_p.append(float(mach0))
+            shifts_p.append(float(shaf_arr[0]) * float(eps_a))
+        if machs_p:
+            order = np.argsort(machs_p)
+            machs_p  = np.array(machs_p)[order]
+            shifts_p = np.array(shifts_p)[order]
+            ax.plot(machs_p, shifts_p, '^-', label=r'PlutoMHD analytic $\Delta/R_0$')
+            print(f"PlutoMHD: {len(machs_p)} points, "
+                  f"M ∈ [{machs_p.min():.3f}, {machs_p.max():.3f}], "
+                  f"Δ/R₀ ∈ [{shifts_p.min():.4f}, {shifts_p.max():.4f}]")
+
     ax.set_xlabel(r'$\mathcal{M}$')
     ax.set_ylabel(r'$\Delta/R_0,\ \varepsilon^2$')
     ax.set_title(f'Shafranov shift vs Mach  ({s_label})')
@@ -703,21 +762,41 @@ if __name__ == '__main__':
     parser.add_argument('--no-plot', action='store_true',
                         help='Skip the fit plot')
     parser.add_argument('--shafranov', action='store_true',
-                        help='Plot Shafranov shift vs Mach number comparing VMEC and VENUS-MHD')
+                        help='Plot Shafranov shift vs Mach number comparing VMEC, VENUS-MHD, and/or PlutoMHD')
     parser.add_argument('--vmec-npz', default=None,
                         help='Glob of VMEC shaping NPZ files for --shafranov (e.g. "run/wout/*_shaping.npz")')
     parser.add_argument('--venus-h5', default=None,
                         help='Glob of VENUS stability h5 files for --shafranov (e.g. "run/*.h5")')
+    parser.add_argument('--pluto-npz', default=None,
+                        help='Full path to a PlutoMHD .npz data file for --shafranov '
+                             '(e.g. "Output/myrun/myrun.npz")')
+    parser.add_argument('--pluto-scanparam', default=None,
+                        help='PlutoMHD scan parameter name for the Mach axis '
+                             '(default: first entry of info["scanorder"])')
+    parser.add_argument('--pluto-fixed', nargs='*', default=None, metavar='KEY=VALUE',
+                        help='Fixed PlutoMHD parameters for multi-dim scans, '
+                             'e.g. --pluto-fixed omega_step=0.0 rho0=2.0')
     args = parser.parse_args()
 
     if args.shafranov:
         vmec_paths  = sorted(glob.glob(args.vmec_npz))  if args.vmec_npz  else []
         venus_paths = sorted(glob.glob(args.venus_h5))  if args.venus_h5  else []
-        if not vmec_paths and not venus_paths:
-            sys.exit("Provide at least one of --vmec-npz or --venus-h5")
+        pluto_fixed = {}
+        if args.pluto_fixed:
+            for item in args.pluto_fixed:
+                k, v = item.split('=', 1)
+                try:
+                    pluto_fixed[k] = float(v)
+                except ValueError:
+                    pluto_fixed[k] = v
+        if not vmec_paths and not venus_paths and not args.pluto_npz:
+            sys.exit("Provide at least one of --vmec-npz, --venus-h5, or --pluto-npz")
         plot_shafranov_vs_mach(
             vmec_npz_paths=vmec_paths or None,
             venus_h5_paths=venus_paths or None,
+            pluto_reader=args.pluto_npz,
+            pluto_scanparam=args.pluto_scanparam,
+            pluto_paramspecs=pluto_fixed or None,
             s_value=args.s_value,
         )
     elif args.fit:
