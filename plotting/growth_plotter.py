@@ -28,7 +28,7 @@ default_settings = {'suptitle': None,
                     'visible':{'suptitle':True, 'legend':True, 'grid':True}}
 
 class plot_growth(object):
-    def __init__(self, reader, scan_specs = {}, settings = {}):
+    def __init__(self, reader, scan_specs = {}, settings = {}, max_scanparam = None):
         self.reader = reader
         self.settings = {}
         defaults = deepcopy(default_settings)
@@ -58,6 +58,7 @@ class plot_growth(object):
         self.scan_specs = scan_specs
 
         self.wA_avgNorm = True # convert VENUS outputs to wA_avg normalisation or not
+        self.max_scanparam = max_scanparam
 
         self.open_plot()
                 
@@ -166,7 +167,10 @@ class plot_growth(object):
             print("ERROR: axis_type not found, valid types ['initparam', 'peakedness', 'peakedness2','xstep_norm']")
             return
         self.initparam = deepcopy(self.reader.info['scanorder'][0])
-        self.spar_list = self.reader.info['scanparams'][self.initparam]
+        spar_list = self.reader.info['scanparams'][self.initparam]
+        if self.max_scanparam is not None:
+            spar_list = [s for s in spar_list if s <= self.max_scanparam]
+        self.spar_list = spar_list
         self.xkey = self.initparam
         if self.xkey.endswith('_avg'):
             self.xkey = self.xkey.replace('_avg','')

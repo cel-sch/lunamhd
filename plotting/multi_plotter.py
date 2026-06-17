@@ -20,7 +20,7 @@ default_settings = {'suptitle': None,
                     'title':None,
                     'y_axis_type':'gam', # ['gam','wr'] # decide whether plotting real frequency or growth rate
                     'y_axis_lims':None,
-                    'x_axis_type':'xstep_norm', # ['initparam', 'peakedness', 'peakedness_anal', 'xstep_norm']
+                    'x_axis_type':'initparam', # ['initparam', 'peakedness', 'peakedness_anal', 'xstep_norm']
                     'x_axis_lims':None,
                     'rot_axis_type':'mach0', # ['mach0', 'mach1', 'omega', 'Omega', 'omegahat']
                     'axis_labels':{},
@@ -43,7 +43,7 @@ default_settings = {'suptitle': None,
                     'legend_loc':'best'}
 
 class plot_multi(object):
-    def __init__(self, readers = [], txts = {}, csvs = {}, scan_specs = {}, settings = {}):
+    def __init__(self, readers = [], txts = {}, csvs = {}, scan_specs = {}, settings = {}, max_scanparam = None):
         self.readers = readers
         self.txts = txts
         self.csvs = csvs
@@ -87,6 +87,7 @@ class plot_multi(object):
         self.spar_lists = {}
 
         self.wA_avgNorm = True # convert VENUS outputs to wA_avg normalisation or not
+        self.max_scanparam = max_scanparam
 
         self.open_plot()
                 
@@ -249,7 +250,10 @@ class plot_multi(object):
         self.xkeys[f'{reader}'] = xkey
         self.xkey0s[f'{reader}'] = xkey0
         self.scankeys[f'{reader}'] = initparam
-        self.spar_lists[f'{reader}'] = reader.info['scanparams'][initparam]
+        spar_list = reader.info['scanparams'][initparam]
+        if self.max_scanparam is not None:
+            spar_list = [s for s in spar_list if s <= self.max_scanparam]
+        self.spar_lists[f'{reader}'] = spar_list
 
         if 'x' in self['axis_labels'].keys():
             self._x_ax_label = self['axis_labels']['x']

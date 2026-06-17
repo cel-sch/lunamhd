@@ -16,7 +16,7 @@ class lunaRead(object):
         if 'viking' in socket.gethostname():
             self.outputpath_root = Path('/users/cs2427/scratch/lunamhd-data')
         else:
-            self.outputpath_root = Path('/Users/cellywelly/Dev/lunamhd/Output')
+            self.outputpath_root = Path('/Users/cellywelly/Dev/lunamhd/Output/')
         if filePath is None:
                 filePath = Path(self.outputpath_root / 'KH' / f'{self.filename}')
         else:
@@ -65,6 +65,18 @@ class lunaRead(object):
     def _find_nearest(self, arr, val):
         nearest_val = min(arr, key=lambda i: abs(i - val))
         return nearest_val
+
+    def _resolve_h5_path(self, file):
+        p = Path(file)
+        if p.exists():
+            return p
+        # Remap remote path by stripping everything up to and including 'Output/'
+        parts = p.parts
+        try:
+            idx = next(i for i, part in enumerate(parts) if part == 'Output')
+            return self.outputpath_root / Path(*parts[idx + 1:])
+        except StopIteration:
+            return p
 
     def get_point_label(self, paramSpecs):
         # NOTE: this relies on ordered dictionaries and will not work for python versions older than 3.6
@@ -162,8 +174,8 @@ class lunaRead(object):
             print(f"{key}: val")
 
     ### PLOT FUNCTIONS ###
-    def EV_plot(self, scan_specs = {}, settings = {}):
-        return Plotters['Growth'](self, scan_specs=scan_specs, settings=settings)
+    def EV_plot(self, scan_specs = {}, settings = {}, max_scanparam = None):
+        return Plotters['Growth'](self, scan_specs=scan_specs, settings=settings, max_scanparam=max_scanparam)
 
     def EF_plot(self, varnrs, scanparam = None, spar_list = None, settings = {}):
         return Plotters['EF'](self, varnrs, scanparam, spar_list, settings)
@@ -171,9 +183,9 @@ class lunaRead(object):
     def profile_plot(self, scanparam = None, spar_list = None, settings = {}):
         return Plotters['Profiles'](self, scanparam, spar_list, settings)
 
-    def multi_plot(self, readers = [], txts = {}, csvs = {}, scan_specs = {}, settings = {}):
+    def multi_plot(self, readers = [], txts = {}, csvs = {}, scan_specs = {}, settings = {}, max_scanparam = None):
         readers.insert(0, self)
-        return Plotters['Multi'](readers = readers, txts = txts, csvs = csvs, scan_specs = scan_specs, settings = settings)
+        return Plotters['Multi'](readers = readers, txts = txts, csvs = csvs, scan_specs = scan_specs, settings = settings, max_scanparam=max_scanparam)
 
     ### DATA ANALYSIS FUNCTIONS ###
     def read_EFh5(self, file, varnr = 0):
@@ -183,6 +195,7 @@ class lunaRead(object):
         # note to self: file acts essentially as a stand-in for scanpoint
         grid = GRID()
         mode_allms = {}
+        file = self._resolve_h5_path(file)
         with h5py.File(file, 'r') as f:
             s = f['Grid']['S'][()]
             for key in [x for x in f['Variables']['EvaluatedModes'].keys() if f'var{varnr}' in x]:
@@ -198,6 +211,7 @@ class lunaRead(object):
         # note to self: file acts essentially as a stand-in for scanpoint
         profile_params = {}
 
+        file = self._resolve_h5_path(file)
         with h5py.File(file, 'r') as f:
             mu0 = 4.*np.pi*1.0E-07
 
