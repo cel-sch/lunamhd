@@ -557,9 +557,10 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
 
 def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
                            pluto_reader=None, pluto_scanparam=None, pluto_paramspecs=None,
-                           s_value=None, ax=None):
+                           s_value=None, show_dprime=False, ax=None, ax2=None):
     """
-    Plot the Shafranov shift vs on-axis Mach number from VMEC, VENUS-MHD, and/or PlutoMHD.
+    Plot the Shafranov shift (and optionally its radial derivative Δ') vs on-axis Mach
+    number from VMEC, VENUS-MHD, and/or PlutoMHD.
 
     VMEC data is read from shaping NPZ files produced by compute_shaping().
     VENUS data is read directly from the stability h5 files written by Stability.Saveh5().
@@ -579,7 +580,12 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
 
     For PlutoMHD, the analytic Shafranov shift from plutorlstab.shaf() is evaluated at
     r = sqrt(s_value) (using s ≈ (r/a)² for circular surfaces) and normalised as
-    Δ/R₀ = shaf(r) * eps_a, where shaf is in units of the minor radius a.
+    Δ/R₀ = -shaf(r) * eps_a³.
+
+    The derivative Δ' = d(Δ/R₀)/d(r/a) is obtained for VMEC and VENUS by numerical
+    differentiation of the shift profile followed by chain-rule conversion from s to r
+    (dΔ/dr = dΔ/ds · 2r).  For PlutoMHD, dshafdr from shaf() is used directly,
+    normalised as Δ' = -dshafdr · eps_a³.
 
     VMEC and VENUS use different radial grids (different resolution and bunching),
     so a physical s value is used to locate the right point in each grid independently.
@@ -603,13 +609,19 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     s_value : float or None
         Normalised flux label s ∈ [0, 1] at which to evaluate the shift. Each
         grid is searched independently for its nearest point. Default None uses
-        the outermost point in each grid (s → 1, i.e. the boundary).
+        the step location r0 (from PlutoMHD) or the outermost point.
+    show_dprime : bool
+        If True, also plot Δ' = d(Δ/R₀)/d(r/a) on a second axes. Default False.
     ax : matplotlib.axes.Axes, optional
-        Axes to plot into. A new figure is created if None.
+        Axes for the Δ/R₀ plot. A new figure is created if None.
+    ax2 : matplotlib.axes.Axes, optional
+        Axes for the Δ' plot (only used when show_dprime=True). Created automatically
+        alongside ax when both are None and show_dprime=True.
 
     Returns
     -------
-    fig, ax
+    fig, ax  (if show_dprime=False)
+    fig, ax, ax2  (if show_dprime=True)
     """
     import h5py
     import matplotlib.pyplot as plt
@@ -619,7 +631,10 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
         return int(np.argmin(np.abs(s_arr - s_target)))
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=(5, 4))
+        if show_dprime:
+            fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+        else:
+            fig, ax = plt.subplots(figsize=(5, 4))
     else:
         fig = ax.get_figure()
 
@@ -652,7 +667,7 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     # --- VMEC ---
     if vmec_npz_paths:
         vmec_npz_paths = [Path(p).expanduser() for p in vmec_npz_paths]
-        machs_v, shifts_v, epssq_v = [], [], []
+        machs_v, shifts_v, epssq_v, dshifts_v = [], [], [], []
         for p in vmec_npz_paths:
             d = np.load(str(p))
             if not {'mach', 'shift', 's', 'R0', 'eps'}.issubset(d.files):
@@ -662,15 +677,23 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             R0_axis = float(d['R0'][0])
             machs_v.append(float(d['mach'][0]))
             # shift(s) = R_axis − R_mid(s) = Δ_axis − Δ(s); subtract to get actual Δ(s)/R0
-            shifts_v.append((float(d['shift'][-1]) - float(d['shift'][idx])) / R0_axis)
+            shift_profile = (d['shift'][-1] - d['shift']) / R0_axis
+            shifts_v.append(float(shift_profile[idx]))
             epssq_v.append(float(d['eps'][idx])**2)
+            # Δ' = d(Δ/R0)/d(r/a) via chain rule: dΔ/dr = dΔ/ds · 2r, s = (r/a)²
+            dshift_ds = np.gradient(shift_profile, d['s'])
+            r_at_idx = np.sqrt(max(float(d['s'][idx]), 1e-10))
+            dshifts_v.append(float(dshift_ds[idx]) * 2 * r_at_idx)
         if machs_v:
             order = np.argsort(machs_v)
-            machs_v  = np.array(machs_v)[order]
-            shifts_v = np.array(shifts_v)[order]
-            epssq_v  = np.array(epssq_v)[order]
+            machs_v   = np.array(machs_v)[order]
+            shifts_v  = np.array(shifts_v)[order]
+            epssq_v   = np.array(epssq_v)[order]
+            dshifts_v = np.array(dshifts_v)[order]
             ax.plot(machs_v, shifts_v, 'o-',  label=r'VMEC $\Delta/R_0$')
             ax.plot(machs_v, epssq_v,  'o--', label=r'VMEC $\varepsilon^2$')
+            if show_dprime and ax2 is not None:
+                ax2.plot(machs_v, dshifts_v, 'o-', label=r"VMEC $\Delta'$")
             print(f"VMEC: {len(machs_v)} points, "
                   f"M ∈ [{machs_v.min():.3f}, {machs_v.max():.3f}], "
                   f"Δ/R₀ ∈ [{shifts_v.min():.4f}, {shifts_v.max():.4f}], "
@@ -679,7 +702,7 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     # --- VENUS-MHD ---
     if venus_h5_paths:
         venus_h5_paths = [Path(p).expanduser() for p in venus_h5_paths]
-        machs_h, shifts_h, epssq_h = [], [], []
+        machs_h, shifts_h, epssq_h, dshifts_h = [], [], [], []
         for p in venus_h5_paths:
             with h5py.File(str(p), 'r') as f:
                 M02  = float(f['normalisation']['M02'][()])
@@ -695,13 +718,22 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             # R_center_n − R_edge_n = Δ(s)/R0 (shift at s relative to boundary)
             shifts_h.append(R_center_n - R_edge_n)
             epssq_h.append(eps_venus**2)
+            # Δ' = d(Δ/R0)/d(r/a); compute full R_mid profile then differentiate
+            R_mid_profile = (R.max(axis=0) + R.min(axis=0)) / 2
+            shift_profile_h = R_mid_profile - float(R_mid_profile[-1])
+            dshift_ds_h = np.gradient(shift_profile_h, s_v)
+            r_at_idx_h = np.sqrt(max(float(s_v[idx]), 1e-10))
+            dshifts_h.append(float(dshift_ds_h[idx]) * 2 * r_at_idx_h)
         if machs_h:
             order = np.argsort(machs_h)
-            machs_h  = np.array(machs_h)[order]
-            shifts_h = np.array(shifts_h)[order]
-            epssq_h  = np.array(epssq_h)[order]
+            machs_h   = np.array(machs_h)[order]
+            shifts_h  = np.array(shifts_h)[order]
+            epssq_h   = np.array(epssq_h)[order]
+            dshifts_h = np.array(dshifts_h)[order]
             ax.plot(machs_h, shifts_h, 's-',  label=r'VENUS $\Delta/R_0$')
             ax.plot(machs_h, epssq_h,  's--', label=r'VENUS $\varepsilon^2$')
+            if show_dprime and ax2 is not None:
+                ax2.plot(machs_h, dshifts_h, 's-', label=r"VENUS $\Delta'$")
             print(f"VENUS: {len(machs_h)} points, "
                   f"M ∈ [{machs_h.min():.3f}, {machs_h.max():.3f}], "
                   f"Δ/R₀ ∈ [{shifts_h.min():.4f}, {shifts_h.max():.4f}], "
@@ -732,10 +764,10 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
         else:
             r_eval = np.array([1.0])
 
-        machs_p, shifts_p = [], []
+        machs_p, shifts_p, dshifts_p = [], [], []
         for spar in spar_list:
             paramSpecs = {**base_specs, pluto_scanparam: spar}
-            shaf_arr, _, _ = reader.get_shaf(paramSpecs, r=r_eval)
+            shaf_arr, dshafdr_arr, _ = reader.get_shaf(paramSpecs, r=r_eval)
             if shaf_arr is None:
                 continue
             mach0 = reader('mach0', paramSpecs)
@@ -744,11 +776,16 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
                 continue
             machs_p.append(float(mach0))
             shifts_p.append(-float(shaf_arr[0]) * float(eps_a)**3)
+            if dshafdr_arr is not None:
+                dshifts_p.append(-float(dshafdr_arr[0]) * float(eps_a)**3)
         if machs_p:
             order = np.argsort(machs_p)
             machs_p  = np.array(machs_p)[order]
             shifts_p = np.array(shifts_p)[order]
             ax.plot(machs_p, shifts_p, '^-', label=r'PlutoMHD analytic $\Delta/R_0$')
+            if show_dprime and ax2 is not None and dshifts_p:
+                dshifts_p = np.array(dshifts_p)[order]
+                ax2.plot(machs_p, dshifts_p, '^-', label=r"PlutoMHD analytic $\Delta'$")
             print(f"PlutoMHD: {len(machs_p)} points, "
                   f"M ∈ [{machs_p.min():.3f}, {machs_p.max():.3f}], "
                   f"Δ/R₀ ∈ [{shifts_p.min():.4f}, {shifts_p.max():.4f}]")
@@ -757,8 +794,15 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     ax.set_ylabel(r'$\Delta/R_0,\ \varepsilon^2$')
     ax.set_title(f'Shafranov shift vs Mach  ({s_label})')
     ax.legend()
+    if show_dprime and ax2 is not None:
+        ax2.set_xlabel(r'$\mathcal{M}$')
+        ax2.set_ylabel(r"$\Delta' = \mathrm{d}(\Delta/R_0)/\mathrm{d}(r/a)$")
+        ax2.set_title(f"Shafranov shift derivative vs Mach  ({s_label})")
+        ax2.legend()
     fig.tight_layout()
     plt.show()
+    if show_dprime:
+        return fig, ax, ax2
     return fig, ax
 
 
@@ -810,6 +854,8 @@ if __name__ == '__main__':
     parser.add_argument('--pluto-fixed', nargs='*', default=None, metavar='KEY=VALUE',
                         help='Fixed PlutoMHD parameters for multi-dim scans, '
                              'e.g. --pluto-fixed omega_step=0.0 rho0=2.0')
+    parser.add_argument('--dprime', action='store_true',
+                        help='Also plot Δ\' = d(Δ/R₀)/d(r/a) on a second panel')
     args = parser.parse_args()
 
     if args.shafranov:
@@ -832,6 +878,7 @@ if __name__ == '__main__':
             pluto_scanparam=args.pluto_scanparam,
             pluto_paramspecs=pluto_fixed or None,
             s_value=args.s_value,
+            show_dprime=args.dprime,
         )
     elif args.fit:
         if not args.target:
