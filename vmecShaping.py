@@ -569,11 +569,13 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     aspect ratio) against on-axis Mach number.  PlutoMHD plots Δ/R₀ only (ε² is a fixed
     geometric quantity in the circular step model).
 
-    The VENUS shift Δ/R₀ = ⟨R⟩_axis − R_mid(s), where R_mid = (R_max + R_min)/2
-    at the chosen surface (coordinate-independent midplane midpoint, normalised by R₀).
+    The VENUS shift Δ/R₀(s) = R_mid(s) − R_mid(1), where R_mid = (R_max + R_min)/2
+    at the chosen surface, normalised by R₀.  This gives the outward displacement of
+    flux surface s relative to the plasma boundary (Δ = 0 at s = 1 by convention).
     The VENUS ε = (R_max − R_min)/(2 ⟨R⟩_axis) at the chosen surface.
-    This matches the VMEC convention: Δ/R₀(s) = [R₀(0) − R₀(s)] / R₀(0),
-    and ε(s) = a(s)/R₀(s) from the Fourier m=0,1 coefficients.
+    The VMEC shift is corrected analogously: Δ/R₀(s) = [shift(1) − shift(s)] / R₀,
+    where shift(s) = R₀(0) − R₀(s) is stored in the shaping NPZ (zero at axis,
+    maximum at boundary), and ε(s) = a(s)/R₀(s) from the Fourier m=0,1 coefficients.
 
     For PlutoMHD, the analytic Shafranov shift from plutorlstab.shaf() is evaluated at
     r = sqrt(s_value) (using s ≈ (r/a)² for circular surfaces) and normalised as
@@ -621,7 +623,31 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     else:
         fig = ax.get_figure()
 
-    s_label = f's = {s_value:.3f}' if s_value is not None else 'outermost surface'
+    # Resolve the effective s-value: explicit > r0 from PlutoMHD > outermost
+    s_eff = s_value
+    r0_eff = None
+    if s_eff is None and pluto_reader is not None:
+        try:
+            from plutomhd.Reader import plutoread
+        except ImportError:
+            pass
+        else:
+            _pr = pluto_reader if isinstance(pluto_reader, plutoread) else plutoread(
+                Path(pluto_reader).expanduser().stem,
+                filePath=Path(pluto_reader).expanduser().parent)
+            _sp0 = list(_pr.info['scanparams'][
+                _pr.info['scanorder'][0] if pluto_scanparam is None else pluto_scanparam])[0]
+            _specs0 = {**(pluto_paramspecs or {}),
+                       (_pr.info['scanorder'][0] if pluto_scanparam is None else pluto_scanparam): _sp0}
+            _r0 = _pr('r0', _specs0)
+            if _r0 is not None:
+                r0_eff = float(_r0)
+                s_eff = r0_eff ** 2
+
+    if s_eff is not None:
+        s_label = f'r₀ = {r0_eff:.3f}  (s = {s_eff:.3f})' if r0_eff is not None else f's = {s_eff:.3f}'
+    else:
+        s_label = 'outermost surface'
 
     # --- VMEC ---
     if vmec_npz_paths:
@@ -632,10 +658,11 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             if not {'mach', 'shift', 's', 'R0', 'eps'}.issubset(d.files):
                 print(f"  VMEC: skipping {p.name} — missing required key(s)")
                 continue
-            idx = _nearest_idx(d['s'], s_value) if s_value is not None else -1
+            idx = _nearest_idx(d['s'], s_eff) if s_eff is not None else -1
             R0_axis = float(d['R0'][0])
             machs_v.append(float(d['mach'][0]))
-            shifts_v.append(float(d['shift'][idx]) / R0_axis)
+            # shift(s) = R_axis − R_mid(s) = Δ_axis − Δ(s); subtract to get actual Δ(s)/R0
+            shifts_v.append((float(d['shift'][-1]) - float(d['shift'][idx])) / R0_axis)
             epssq_v.append(float(d['eps'][idx])**2)
         if machs_v:
             order = np.argsort(machs_v)
@@ -658,13 +685,15 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
                 M02  = float(f['normalisation']['M02'][()])
                 s_v  = f['Grid']['S'][()]          # VENUS radial grid, shape (Nsurf,)
                 R    = f['geometry']['R'][()]       # shape (Ntheta, Nsurf), normalised by R0
-            idx = _nearest_idx(s_v, s_value) if s_value is not None else -1
+            idx = _nearest_idx(s_v, s_eff) if s_eff is not None else -1
             R_axis_n  = np.mean(R[:, 0])                              # normalised axis R
             R_col_n   = R[:, idx]                                     # normalised R at chosen surface
             R_center_n = (R_col_n.max() + R_col_n.min()) / 2
+            R_edge_n   = (R[:, -1].max() + R[:, -1].min()) / 2       # boundary midpoint R
             eps_venus  = (R_col_n.max() - R_col_n.min()) / 2 / R_axis_n
             machs_h.append(np.sqrt(max(M02, 0.0)))
-            shifts_h.append(R_axis_n - R_center_n)                   # Δ/R₀ (dimensionless)
+            # R_center_n − R_edge_n = Δ(s)/R0 (shift at s relative to boundary)
+            shifts_h.append(R_center_n - R_edge_n)
             epssq_h.append(eps_venus**2)
         if machs_h:
             order = np.argsort(machs_h)
@@ -696,7 +725,12 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
 
         spar_list = reader.info['scanparams'][pluto_scanparam]
         base_specs = dict(pluto_paramspecs or {})
-        r_eval = np.array([np.sqrt(s_value)]) if s_value is not None else np.array([1.0])
+        if r0_eff is not None:
+            r_eval = np.array([r0_eff])
+        elif s_value is not None:
+            r_eval = np.array([np.sqrt(s_value)])
+        else:
+            r_eval = np.array([1.0])
 
         machs_p, shifts_p = [], []
         for spar in spar_list:
@@ -709,7 +743,7 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             if mach0 is None or eps_a is None:
                 continue
             machs_p.append(float(mach0))
-            shifts_p.append(float(shaf_arr[0]) * float(eps_a))
+            shifts_p.append(-float(shaf_arr[0]) * float(eps_a)**3)
         if machs_p:
             order = np.argsort(machs_p)
             machs_p  = np.array(machs_p)[order]
