@@ -426,7 +426,7 @@ _FIT_QUANTITIES = {
 }
 
 
-def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
+def fit_shaping_scan(npz_paths, s_index=None, s_value=None, degree=4, plot=True, outpath=None):
     """
     Fit shaping coefficients as polynomial functions of Mach number M.
 
@@ -436,15 +436,19 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
         quantity(M) = a0 + a1·M + a2·M² + … + an·M^degree
 
     The x-axis Mach number is always taken from mach[0] (on-axis M₀ = √machsq),
-    independent of s_index.
+    independent of the chosen surface.
 
     Parameters
     ----------
     npz_paths : list of str or Path
         Shaping NPZ files to load (one per equilibrium/Mach number).
-    s_index : int
-        Flux-surface index at which to evaluate shaping quantities. Default 1
-        (near-axis, avoiding the s=0 singularity).
+    s_index : int, optional
+        Flux-surface array index at which to evaluate shaping quantities.
+        Mutually exclusive with s_value.
+    s_value : float, optional
+        Normalised flux label s ∈ [0, 1]. The nearest grid point is found
+        from the 's' array in the first NPZ file. Mutually exclusive with
+        s_index. Default (when both are None): s_value = 0.5.
     degree : int
         Polynomial degree in M (default 4).
     plot : bool
@@ -461,6 +465,9 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
     from scipy.optimize import curve_fit
     import matplotlib.pyplot as plt
 
+    if s_index is not None and s_value is not None:
+        raise ValueError("Specify at most one of s_index or s_value")
+
     # --- load all files ---
     npz_paths = [Path(p).expanduser() for p in npz_paths]
     records = []
@@ -474,6 +481,17 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
         return {}
 
     print(f"fit_shaping_scan: loaded {len(records)} files, M range [{min(r[0] for r in records):.3f}, {max(r[0] for r in records):.3f}]")
+
+    # --- resolve flux-surface index ---
+    if s_index is None:
+        target_s = s_value if s_value is not None else 0.5
+        s_arr = records[0][1]['s'] if 's' in records[0][1] else None
+        if s_arr is not None:
+            s_index = int(np.argmin(np.abs(s_arr - target_s)))
+            print(f"fit_shaping_scan: s_value={target_s} → nearest s={float(s_arr[s_index]):.4f} (index {s_index})")
+        else:
+            s_index = 1
+            print("fit_shaping_scan: no 's' array found, falling back to s_index=1")
 
     records.sort(key=lambda x: x[0])
     machs = np.array([r[0] for r in records])
@@ -941,9 +959,9 @@ if __name__ == '__main__':
                         help='(--shafranov) Normalised flux label s ∈ [0,1] at which to '
                              'evaluate Δ. Each grid is searched independently. '
                              'Default: outermost point in each grid.')
-    parser.add_argument('--s-index', type=int, default=1,
-                        help='(--fit) Flux-surface array index for fit_shaping_scan '
-                             '(default: 1, near-axis). Not used by --shafranov.')
+    parser.add_argument('--s-index', type=int, default=None,
+                        help='(--fit) Flux-surface array index for fit_shaping_scan. '
+                             'Use --s-value instead to specify by flux label.')
     parser.add_argument('--degree', type=int, default=4,
                         help='Polynomial degree in M for fitting (default: 4)')
     parser.add_argument('--no-plot', action='store_true',
@@ -1013,7 +1031,14 @@ if __name__ == '__main__':
         npz_paths = sorted(glob.glob(args.target))
         if not npz_paths:
             sys.exit(f"No files matched: {args.target}")
-        fit_shaping_scan(npz_paths, s_index=args.s_index, degree=args.degree, plot=not args.no_plot)  # noqa: E501
+        fit_shaping_scan(
+            npz_paths,
+            s_index=args.s_index,
+            s_value=args.s_value,
+            degree=args.degree,
+            plot=not args.no_plot,
+            outpath=args.outfile,
+        )
     else:
         if not args.target:
             sys.exit("Provide a target (wout path or run name)")
