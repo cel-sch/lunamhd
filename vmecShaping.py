@@ -25,14 +25,14 @@ S₂(s)   elongation amplitude    (R₁c − Z₁s) / 2
 S₃(s)   triangularity amplitude rmnc[m=2, n=0]
 κ(s)    elongation              (r − S₂) / (r + S₂) = Z₁s / R₁c
 δ(s)    triangularity           4 S₃ / r
-Δ(s)    Shafranov shift         R0[0] − R0(s)
+Δ(s)    Shafranov shift         R0(s) − R0[-1]
 F₂(s)   toroidal flux variation  bsubvmnc[m=0, n=0] / rbtor0 − 1
 DI      Mercier shape factor     (3/4)(κ−1)(1 − 2δ/ε)
 
 Sign conventions
 ----------------
 δ > 0   inward triangularity (D-shape)
-Δ > 0   outward shift from axis
+Δ > 0   outward displacement of surface s from the boundary reference R₀
 F₂ < 0  typical (diamagnetic: finite-β reduces toroidal flux function)
 
 Axis note
@@ -212,7 +212,8 @@ class ShapingCoeffs:
                 R = R₀ + r·cos θ
                 Z = r·sin θ
             where R₀(s) already carries the Shafranov shift (it is the m=0
-            Fourier component of R from VMEC, so R₀(s) = R₀_axis − Δ(s)).
+            Fourier component of R from VMEC, so R₀(s) = R₀_boundary + Δ(s),
+            with Δ(s) = R0c(s) − R0c(edge) largest at the axis and zero at the boundary).
 
         simple=False — full m=0,1,2 Graves expansion (Appendix B1):
             R(s,θ) = R₀ + (r + S₂)·cos θ + S₃·cos 2θ
@@ -778,9 +779,9 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
                 print(f"  VMEC: skipping {p.name} — missing required key(s)")
                 continue
             idx = _nearest_idx(d['s'], s_eff) if s_eff is not None else -1
-            R0_axis = float(d['R0'][0])
+            R0_boundary = float(d['R0'][-1])   # boundary reference R₀ (unshifted)
             machs_v.append(float(d['mach'][0]))
-            shift_profile = d['shift'] / R0_axis
+            shift_profile = d['shift'] / R0_boundary
             shifts_v.append(float(shift_profile[idx]))
             epssq_v.append(float(d['eps'][idx])**2)
             # Δ' = d(Δ/R0)/d(r/a) via chain rule: dΔ/dr = dΔ/ds · 2r, s = (r/a)²
