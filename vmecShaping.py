@@ -172,8 +172,7 @@ class ShapingCoeffs:
 
         self.R0  = R0c
         self.r   = (R1c + Z1s) / 2
-        # self.a = R1c?
-        self.eps = self._safe_div(self.r, self.R0)
+        self.eps = self.r / R0c[-1]   # r/R₀ using boundary as fixed unshifted reference
         self.S2  = (R1c - Z1s) / 2   # elongation amplitude
         self.S3  = R2c                # triangularity amplitude
 
@@ -813,11 +812,11 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
                 s_v  = f['Grid']['S'][()]          # VENUS radial grid, shape (Nsurf,)
                 R    = f['geometry']['R'][()]       # shape (Ntheta, Nsurf), normalised by R0
             idx = _nearest_idx(s_v, s_eff) if s_eff is not None else -1
-            R_axis_n  = np.mean(R[:, 0])                              # normalised axis R
-            R_col_n   = R[:, idx]                                     # normalised R at chosen surface
-            R_center_n = (R_col_n.max() + R_col_n.min()) / 2
-            R_edge_n   = (R[:, -1].max() + R[:, -1].min()) / 2       # boundary midpoint R
-            eps_venus  = (R_col_n.max() - R_col_n.min()) / 2 / R_axis_n
+            R_axis_n   = float(R[:, 0].mean())                        # normalised R₀ reference (≈1 in VENUS units)
+            R_col_n    = R[:, idx]                                     # normalised R at chosen surface
+            R_center_n = (R_col_n.max() + R_col_n.min()) / 2         # midplane midpoint at s
+            R_edge_n   = (R[:, -1].max() + R[:, -1].min()) / 2       # boundary midpoint
+            eps_venus  = (R_col_n.max() - R_col_n.min()) / 2 / R_axis_n  # r/R₀ using fixed reference
             machs_h.append(np.sqrt(max(M02, 0.0)))
             # R_center_n − R_edge_n = Δ(s)/R0 (shift at s relative to boundary)
             shifts_h.append(R_center_n - R_edge_n)
