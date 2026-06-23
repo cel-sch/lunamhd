@@ -780,7 +780,13 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             idx = _nearest_idx(d['s'], s_eff) if s_eff is not None else -1
             R0_boundary = float(d['R0'][-1])   # boundary reference R₀ (unshifted)
             machs_v.append(float(d['mach'][0]))
-            shift_profile = d['shift'] / R0_boundary
+            # Support both NPZ conventions:
+            #   new: shift = R0c - R0c[-1], large at axis, 0 at edge
+            #   old: shift = R0c[0] - R0c, 0 at axis, large at edge
+            raw = d['shift']
+            if float(raw[0]) < float(raw[-1]):  # old convention detected
+                raw = raw[-1] - raw
+            shift_profile = raw / R0_boundary
             shifts_v.append(float(shift_profile[idx]))
             epssq_v.append(float(d['eps'][idx])**2)
             # Δ' = d(Δ/R0)/d(r/a) via chain rule: dΔ/dr = dΔ/ds · 2r, s = (r/a)²
