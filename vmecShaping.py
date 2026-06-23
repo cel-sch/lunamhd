@@ -551,6 +551,109 @@ def fit_shaping_scan(npz_paths, s_index=1, degree=4, plot=True, outpath=None):
     return results
 
 
+def fit_venus_dshafdr(h5_paths, s_value=0.5, degree=4, plot=True, outpath=None):
+    """
+    Extract d(Δ/R₀)/d(r/a) at a chosen flux surface from VENUS h5 files,
+    fit as a polynomial in on-axis Mach number, and optionally save.
+
+    The derivative is computed by numerical differentiation of the R_mid
+    profile (as in plot_shafranov_vs_mach) and chain-rule conversion from s
+    to r: dΔ/dr = dΔ/ds · 2r, where s = (r/a)².
+
+    The output NPZ uses the same key convention as fit_shaping_scan
+    ('dshafdr_coeffs', 'dshafdr_perr'), so it can be merged into an existing
+    shaping file and read by RealStability._load_shaping().  If outpath
+    points to an existing NPZ the new keys are merged in without overwriting
+    the other shaping coefficients already present.
+
+    Parameters
+    ----------
+    h5_paths : list of str or Path
+        VENUS stability h5 files (one per Mach point).
+    s_value : float
+        Flux-surface label s at which to evaluate dΔ/dr.  Default 0.5
+        (matches r0 = 0.5 in the step model).
+    degree : int
+        Polynomial degree in M (default 4).
+    plot : bool
+        Show a figure of data and fit.
+    outpath : str or Path, optional
+        NPZ file to write (or merge into).
+
+    Returns
+    -------
+    dict with keys 'coeffs', 'perr', 'mach', 'values'.
+    """
+    import h5py
+    from scipy.optimize import curve_fit
+    import matplotlib.pyplot as plt
+
+    def _nearest_idx(s_arr, s_target):
+        return int(np.argmin(np.abs(s_arr - s_target)))
+
+    records = []
+    for p in [Path(q).expanduser() for q in h5_paths]:
+        with h5py.File(str(p), 'r') as f:
+            M02 = float(f['normalisation']['M02'][()])
+            s_v = f['Grid']['S'][()]
+            R   = f['geometry']['R'][()]
+        M0  = np.sqrt(max(M02, 0.0))
+        idx = _nearest_idx(s_v, s_value)
+        R_mid   = (R.max(axis=0) + R.min(axis=0)) / 2
+        shift_p = R_mid - float(R_mid[-1])          # Δ(s)/R0, 0 at boundary
+        dds     = np.gradient(shift_p, s_v)
+        r_idx   = np.sqrt(max(float(s_v[idx]), 1e-10))
+        records.append((M0, float(dds[idx]) * 2 * r_idx))
+
+    if not records:
+        print("fit_venus_dshafdr: no files loaded")
+        return {}
+
+    records.sort(key=lambda x: x[0])
+    machs = np.array([r[0] for r in records])
+    vals  = np.array([r[1] for r in records])
+
+    print(f"fit_venus_dshafdr: {len(records)} points, "
+          f"M ∈ [{machs.min():.3f}, {machs.max():.3f}], "
+          f"dΔ/dr ∈ [{vals.min():.5f}, {vals.max():.5f}]  (s = {s_value})")
+
+    def poly_model(M, *c):
+        return sum(ci * M**k for k, ci in enumerate(c))
+
+    p0 = np.zeros(degree + 1)
+    p0[0] = float(np.nanmean(vals))
+    try:
+        popt, pcov = curve_fit(poly_model, machs, vals, p0=p0)
+        perr = np.sqrt(np.diag(pcov))
+    except RuntimeError:
+        popt, perr = p0, np.full_like(p0, np.nan)
+
+    terms = [f'{popt[0]:.5f}'] + [f'({popt[k]:+.5f})·M^{k}' for k in range(1, degree + 1)]
+    print(f"  dshafdr(M) = {' '.join(terms)}")
+
+    if plot:
+        fig, ax = plt.subplots(figsize=(5, 4))
+        ax.scatter(machs, vals, zorder=3, label='VENUS data')
+        M_d = np.linspace(machs.min(), machs.max(), 200)
+        ax.plot(M_d, poly_model(M_d, *popt), label='fit')
+        ax.set_xlabel(r'$\mathcal{M}$')
+        ax.set_ylabel(r"$\mathrm{d}(\Delta/R_0)/\mathrm{d}(r/a)$")
+        ax.set_title(f"VENUS Shafranov shift gradient vs Mach  (s = {s_value:.3f})")
+        ax.legend()
+        fig.tight_layout()
+        plt.show()
+
+    if outpath is not None:
+        out = Path(outpath).expanduser()
+        existing = dict(np.load(str(out))) if out.exists() else {}
+        existing['dshafdr_coeffs'] = popt
+        existing['dshafdr_perr']   = perr
+        np.savez(str(out), **existing)
+        print(f"  → saved to {out}")
+
+    return {'coeffs': popt, 'perr': perr, 'mach': machs, 'values': vals}
+
+
 # ---------------------------------------------------------------------------
 # Shafranov shift vs Mach comparison plot (VMEC + VENUS-MHD)
 # ---------------------------------------------------------------------------
@@ -856,9 +959,27 @@ if __name__ == '__main__':
                              'e.g. --pluto-fixed omega_step=0.0 rho0=2.0')
     parser.add_argument('--dprime', action='store_true',
                         help='Also plot Δ\' = d(Δ/R₀)/d(r/a) on a second panel')
+    parser.add_argument('--venus-dshafdr', action='store_true',
+                        help='Fit dΔ/dr vs Mach from VENUS h5 files (requires --venus-h5 and --outfile)')
+    parser.add_argument('--outfile', default=None,
+                        help='NPZ file to write/merge fit results into (for --venus-dshafdr and --fit)')
     args = parser.parse_args()
 
-    if args.shafranov:
+    if args.venus_dshafdr:
+        if not args.venus_h5:
+            sys.exit("--venus-dshafdr requires --venus-h5")
+        venus_paths = sorted(glob.glob(args.venus_h5))
+        if not venus_paths:
+            sys.exit(f"No files matched: {args.venus_h5}")
+        s_val = args.s_value if args.s_value is not None else 0.5
+        fit_venus_dshafdr(
+            venus_paths,
+            s_value=s_val,
+            degree=args.degree,
+            plot=not args.no_plot,
+            outpath=args.outfile,
+        )
+    elif args.shafranov:
         vmec_paths  = sorted(glob.glob(args.vmec_npz))  if args.vmec_npz  else []
         venus_paths = sorted(glob.glob(args.venus_h5))  if args.venus_h5  else []
         pluto_fixed = {}
