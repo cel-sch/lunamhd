@@ -183,8 +183,9 @@ class ShapingCoeffs:
         # δ: triangularity = 4S₃/r
         self.delta = self._safe_div(4 * self.S3, self.r)
 
-        # Δ: Shafranov shift relative to axis (positive = outward)
-        self.shift = self.R0[0] - R0c
+        # Δ: Shafranov shift relative to boundary (positive = outward from axis)
+        # Large near the axis (where displacement is greatest), zero at the edge.
+        self.shift = R0c - R0c[-1]
 
         # F₂: fractional variation of toroidal flux function F = R·Bφ
         # F(r) = R₀B₀(1 + F₂), so F₂ = bsubvmnc[m=0,n=0] / rbtor0 − 1
@@ -677,9 +678,9 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     at the chosen surface, normalised by R₀.  This gives the outward displacement of
     flux surface s relative to the plasma boundary (Δ = 0 at s = 1 by convention).
     The VENUS ε = (R_max − R_min)/(2 ⟨R⟩_axis) at the chosen surface.
-    The VMEC shift is corrected analogously: Δ/R₀(s) = [shift(1) − shift(s)] / R₀,
-    where shift(s) = R₀(0) − R₀(s) is stored in the shaping NPZ (zero at axis,
-    maximum at boundary), and ε(s) = a(s)/R₀(s) from the Fourier m=0,1 coefficients.
+    The VMEC shift is Δ/R₀(s) = shift(s) / R₀, where shift(s) = R₀(s) − R₀(1)
+    is stored in the shaping NPZ (maximum at axis, zero at boundary),
+    and ε(s) = a(s)/R₀(s) from the Fourier m=0,1 coefficients.
 
     For PlutoMHD, the analytic Shafranov shift from plutorlstab.shaf() is evaluated at
     r = sqrt(s_value) (using s ≈ (r/a)² for circular surfaces) and normalised as
@@ -779,8 +780,7 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             idx = _nearest_idx(d['s'], s_eff) if s_eff is not None else -1
             R0_axis = float(d['R0'][0])
             machs_v.append(float(d['mach'][0]))
-            # shift(s) = R_axis − R_mid(s) = Δ_axis − Δ(s); subtract to get actual Δ(s)/R0
-            shift_profile = (d['shift'][-1] - d['shift']) / R0_axis
+            shift_profile = d['shift'] / R0_axis
             shifts_v.append(float(shift_profile[idx]))
             epssq_v.append(float(d['eps'][idx])**2)
             # Δ' = d(Δ/R0)/d(r/a) via chain rule: dΔ/dr = dΔ/ds · 2r, s = (r/a)²
