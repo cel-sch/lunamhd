@@ -657,10 +657,10 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             _r0 = _pr('r0', _specs0)
             if _r0 is not None:
                 r0_eff = float(_r0)
-                s_eff = r0_eff ** 2
+                s_eff = r0_eff  # use r0 directly as s so VMEC/VENUS evaluate at s = r0
 
     if s_eff is not None:
-        s_label = f'r₀ = {r0_eff:.3f}  (s = {s_eff:.3f})' if r0_eff is not None else f's = {s_eff:.3f}'
+        s_label = f's = r₀ = {s_eff:.3f}' if r0_eff is not None else f's = {s_eff:.3f}'
     else:
         s_label = 'outermost surface'
 
