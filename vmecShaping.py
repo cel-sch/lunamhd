@@ -186,6 +186,12 @@ class ShapingCoeffs:
         # Large near the axis (where displacement is greatest), zero at the edge.
         self.shift = R0c - R0c[-1]
 
+        # dΔ/d(r/a): radial derivative of Δ/R₀ via chain rule dΔ/dr = dΔ/ds · 2r
+        # s = (r/a)², so ds/dr = 2r → dr = ds/(2r)
+        r_arr = np.sqrt(np.maximum(self.wout.s, 1e-10))
+        dshift_ds = np.gradient(self.shift / R0c[-1], self.wout.s)
+        self.dshafdr = dshift_ds * 2 * r_arr
+
         # F₂: fractional variation of toroidal flux function F = R·Bφ
         # F(r) = R₀B₀(1 + F₂), so F₂ = bsubvmnc[m=0,n=0] / rbtor0 − 1
         self.F2 = self._safe_div(self._Fv, self.wout.rbtor0) - 1.0
@@ -270,10 +276,11 @@ class ShapingCoeffs:
             'S3':    self.S3,
             'kappa': self.kappa,
             'delta': self.delta,
-            'shift': self.shift,
-            'F2':    self.F2,
-            'DI':    self.di,
-            'mach':  self.mach,
+            'shift':   self.shift,
+            'dshafdr': self.dshafdr,
+            'F2':      self.F2,
+            'DI':      self.di,
+            'mach':    self.mach,
         }
 
     def summary(self, label=None):
@@ -417,12 +424,13 @@ def compute_shaping(run_name_or_path, index=None, fmt='npz', outdir=None, save=T
 
 #: Shaping quantities available for fitting and their display labels.
 _FIT_QUANTITIES = {
-    'kappa': r'$\kappa$',
-    'delta': r'$\delta$',
-    'shift': r'$\Delta$ [m]',
-    'eps':   r'$\varepsilon$',
-    'F2':    r'$F_2$',
-    'DI':    r'$D_I$',
+    'kappa':   r'$\kappa$',
+    'delta':   r'$\delta$',
+    'shift':   r'$\Delta$ [m]',
+    'eps':     r'$\varepsilon$',
+    'F2':      r'$F_2$',
+    'DI':      r'$D_I$',
+    'dshafdr': r"$\mathrm{d}(\Delta/R_0)/\mathrm{d}(r/a)$",
 }
 
 
