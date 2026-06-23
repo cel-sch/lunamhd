@@ -585,7 +585,7 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     The derivative Δ' = d(Δ/R₀)/d(r/a) is obtained for VMEC and VENUS by numerical
     differentiation of the shift profile followed by chain-rule conversion from s to r
     (dΔ/dr = dΔ/ds · 2r).  For PlutoMHD, dshafdr from shaf() is used directly,
-    normalised as Δ' = -dshafdr · eps_a³.
+    normalised as Δ' = dshafdr · eps_a³.
 
     VMEC and VENUS use different radial grids (different resolution and bunching),
     so a physical s value is used to locate the right point in each grid independently.
@@ -777,7 +777,7 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             machs_p.append(float(mach0))
             shifts_p.append(-float(shaf_arr[0]) * float(eps_a)**3)
             if dshafdr_arr is not None:
-                dshifts_p.append(-float(dshafdr_arr[0]) * float(eps_a)**3)
+                dshifts_p.append(float(dshafdr_arr[0]) * float(eps_a)**3)
         if machs_p:
             order = np.argsort(machs_p)
             machs_p  = np.array(machs_p)[order]
