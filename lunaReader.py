@@ -183,9 +183,14 @@ class lunaRead(object):
     def profile_plot(self, scanparam = None, spar_list = None, settings = {}):
         return Plotters['Profiles'](self, scanparam, spar_list, settings)
 
-    def multi_plot(self, readers = [], txts = {}, csvs = {}, scan_specs = {}, settings = {}, max_scanparam = None):
+    def multi_plot(self, readers = [], scan_specs = {}, settings = {}, max_scanparam = None):
+        # Delegates to plutomhd's multi_plot (not lunamhd's own, now-unused-for-this
+        # copy) so pluto/VENUS comparison plots share one implementation instead of two
+        # that silently drift apart -- it already branches on reader type internally,
+        # so it works the same whether a lunaRead or a plutoread ends up at position 0.
+        import plutomhd.plotting
         readers.insert(0, self)
-        return Plotters['Multi'](readers = readers, txts = txts, csvs = csvs, scan_specs = scan_specs, settings = settings, max_scanparam=max_scanparam)
+        return plutomhd.plotting.Plotters['Multi'](readers = readers, scan_specs = scan_specs, settings = settings, max_scanparam=max_scanparam)
 
     ### DATA ANALYSIS FUNCTIONS ###
     def read_EFh5(self, file, varnr = 0):
