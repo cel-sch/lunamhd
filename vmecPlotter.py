@@ -118,7 +118,8 @@ class VmecPlotter:
     # Plot 1: flux surfaces in R-Z, coloured by |B| on each surface
     # -----------------------------------------------------------------------
     def flux_surfaces(self, n_surfaces=12, ax=None, show=True, title=None,
-                      shaping=True, venus='auto'):
+                      shaping=True, venus='auto',
+                      pluto_reader=None, pluto_scanparam=None, pluto_paramspecs=None):
         """
         R-Z cross-section with flux surface contours.
         Surfaces are evenly spaced in s ∈ (0,1], skipping the axis.
@@ -131,6 +132,13 @@ class VmecPlotter:
             Path to a VENUS-MHD HDF5 output file for a flux surface overlay.
             'auto' (default) tries to find the matching h5 alongside the wout
             file; pass None to disable.
+        pluto_reader, pluto_scanparam, pluto_paramspecs :
+            If pluto_reader is given (a plutomhd.Reader.plutoread instance, or
+            path to a PlutoMHD .npz output), the 'analytic (circular)' overlay's
+            R₀(s) is built from PlutoMHD's analytically calculated Shafranov
+            shift (shaf()) instead of VMEC's own m=0 mode -- see
+            ShapingCoeffs.reconstruct_pluto() for details. Ignored if
+            shaping=False.
         """
         if venus == 'auto':
             venus = self._guess_venus_h5()
@@ -151,10 +159,16 @@ class VmecPlotter:
 
         # Optionally build analytic reconstruction from shaping coefficients
         R_an = Z_an = None
+        an_label = 'analytic (circular)'
         if shaping:
             from vmecShaping import ShapingCoeffs
             sc = ShapingCoeffs(w)
-            R_an, Z_an = sc.reconstruct(self.theta)
+            if pluto_reader is not None:
+                R_an, Z_an = sc.reconstruct_pluto(self.theta, pluto_reader,
+                                                  pluto_scanparam, pluto_paramspecs)
+                an_label = 'analytic (circular, PlutoMHD Δ)'
+            else:
+                R_an, Z_an = sc.reconstruct(self.theta)
 
         # Optionally load VENUS flux surface geometry
         R_ven = Z_ven = s_ven = None
@@ -179,7 +193,7 @@ class VmecPlotter:
                 color=colour, lw=0.8
             )
             if R_an is not None:
-                label = 'analytic (circular)' if not _labelled_an else None
+                label = an_label if not _labelled_an else None
                 _labelled_an = True
                 ax.plot(
                     np.append(R_an[idx], R_an[idx, 0]),
@@ -318,7 +332,8 @@ class VmecPlotter:
 # Interactive Mach-number slider
 # ---------------------------------------------------------------------------
 
-def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12, shaping=True, venus='auto'):
+def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12, shaping=True, venus='auto',
+                          pluto_reader=None, pluto_scanparam=None, pluto_paramspecs=None):
     """
     Interactive R-Z flux surface plot with a slider to scrub through all
     Mach numbers in a run.  Wout files are sorted by M (ascending).
@@ -336,6 +351,10 @@ def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12, shaping=True, ve
     venus : 'auto' or None
         'auto' (default) finds the matching VENUS h5 for each wout and overlays
         those flux surfaces. Pass None to disable.
+    pluto_reader, pluto_scanparam, pluto_paramspecs :
+        If pluto_reader is given, each frame's analytic overlay uses PlutoMHD's
+        shaf()-derived Shafranov shift instead of VMEC's own m=0 mode -- see
+        VmecPlotter.flux_surfaces() / ShapingCoeffs.reconstruct_pluto().
     """
     # --- load & sort ---
     paths = list_wouts(run_name, run_dir=run_dir)
@@ -354,12 +373,19 @@ def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12, shaping=True, ve
 
     # --- pre-compute analytic reconstructions (one per frame) ---
     an_data = None
+    an_label = 'analytic (circular)'
     if shaping:
         from vmecShaping import ShapingCoeffs
         an_data = []
         for p in plotters:
             sc = ShapingCoeffs(p.w)
-            R_an, Z_an = sc.reconstruct(p.theta, simple=True)  # (ns, ntheta)
+            if pluto_reader is not None:
+                R_an, Z_an = sc.reconstruct_pluto(p.theta, pluto_reader,
+                                                  pluto_scanparam, pluto_paramspecs,
+                                                  simple=True)  # (ns, ntheta)
+                an_label = 'analytic (circular, PlutoMHD Δ)'
+            else:
+                R_an, Z_an = sc.reconstruct(p.theta, simple=True)  # (ns, ntheta)
             an_data.append((R_an, Z_an))
 
     # --- pre-load VENUS geometry (one per frame) ---
@@ -427,7 +453,7 @@ def flux_surfaces_slider(run_name, run_dir=None, n_surfaces=12, shaping=True, ve
     if an_data is not None:
         R_an0, Z_an0 = an_data[0]
         for i, si in enumerate(s_indices):
-            label = 'analytic (circular)' if i == 0 else None
+            label = an_label if i == 0 else None
             line, = ax.plot(
                 np.append(R_an0[si], R_an0[si, 0]),
                 np.append(Z_an0[si], Z_an0[si, 0]),
