@@ -186,11 +186,9 @@ class ShapingCoeffs:
         # Large near the axis (where displacement is greatest), zero at the edge.
         self.shift = R0c - R0c[-1]
 
-        # dΔ/d(r/a): radial derivative of Δ/R₀ via chain rule dΔ/dr = dΔ/ds · 2r
-        # s = (r/a)², so ds/dr = 2r → dr = ds/(2r)
-        r_arr = np.sqrt(np.maximum(self.wout.s, 1e-10))
-        dshift_ds = np.gradient(self.shift / R0c[-1], self.wout.s)
-        self.dshafdr = dshift_ds * 2 * r_arr
+        # dΔ/d(r/a): radial derivative of Δ/R₀.  wout.s = sqrt(phi/phi_edge)
+        # is already ≈ r/a (vmecReader), so no chain-rule factor is needed.
+        self.dshafdr = np.gradient(self.shift / R0c[-1], self.wout.s)
 
         # F₂: fractional variation of toroidal flux function F = R·Bφ
         # F(r) = R₀B₀(1 + F₂), so F₂ = bsubvmnc[m=0,n=0] / rbtor0 − 1
@@ -244,6 +242,92 @@ class ShapingCoeffs:
             S3 = self.S3[:, np.newaxis]
             R = R0 + (r + S2) * np.cos(theta) + S3 * np.cos(2 * theta)
             Z =      (r - S2) * np.sin(theta)
+        return R, Z
+
+    def reconstruct_pluto(self, theta, pluto_reader, pluto_scanparam=None,
+                          pluto_paramspecs=None, simple=True):
+        """
+        Same as reconstruct(), but drives R₀(s) from PlutoMHD's analytically
+        calculated Shafranov shift (plutorlstab.shaf()) instead of VMEC's own
+        m=0 Fourier mode -- so the 'analytic (circular)' overlay actually
+        compares an independent physics-model shift to VMEC, rather than
+        re-drawing VMEC's own shift in circular form.
+
+        The matching PlutoMHD scan point is the one whose on-axis Mach number
+        (mach0) is closest to this wout's machsq. shaf() is only valid outside
+        the density/pressure step (r >= r0 in PlutoMHD's normalised units,
+        where r0 is the step location) -- inside the step it diverges, so r is
+        clipped at r0 there, holding the shift at its r0 value (no further
+        drive is modelled inside the step at this order). The resulting Δ/R₀
+        profile is referenced to zero at the boundary (s=1), matching the
+        VMEC/VENUS shift convention, then scaled by the physical boundary R₀
+        (self.R0[-1]) and added back on top of it.
+
+        Parameters
+        ----------
+        theta : 1-D array, shape (ntheta,)
+        pluto_reader : plutomhd.Reader.plutoread instance, str, or Path
+            A loaded reader, or the path to a PlutoMHD .npz output file.
+        pluto_scanparam : str, optional
+            Scan parameter that sweeps Mach number. Defaults to
+            reader.info['scanorder'][0].
+        pluto_paramspecs : dict, optional
+            Fixed parameter values selecting a slice of a multi-dimensional
+            PlutoMHD scan.
+        simple : bool
+            As in reconstruct() -- circular (True) or full m=0,1,2 (False)
+            cross-section shape; only R₀(s) differs from reconstruct().
+
+        Returns
+        -------
+        R, Z : 2-D arrays, shape (ns, ntheta)
+        """
+        from plutomhd.Reader import plutoread
+
+        if not isinstance(pluto_reader, plutoread):
+            p = Path(pluto_reader).expanduser()
+            reader = plutoread(p.stem, filePath=p.parent)
+        else:
+            reader = pluto_reader
+
+        if pluto_scanparam is None:
+            pluto_scanparam = reader.info['scanorder'][0]
+        spar_list = reader.info['scanparams'][pluto_scanparam]
+        base_specs = dict(pluto_paramspecs or {})
+
+        # Find the scan point whose mach0 best matches this wout's Mach number.
+        mach_target = np.sqrt(max(self.wout.machsq, 0.0))
+        mach0_vals = np.full(len(spar_list), np.nan)
+        for i, spar in enumerate(spar_list):
+            m0 = reader('mach0', {**base_specs, pluto_scanparam: spar})
+            if m0 is not None:
+                mach0_vals[i] = m0
+        if np.all(np.isnan(mach0_vals)):
+            raise ValueError("Could not find any matching 'mach0' values in pluto_reader")
+        best = int(np.nanargmin(np.abs(mach0_vals - mach_target)))
+        matched_specs = {**base_specs, pluto_scanparam: spar_list[best]}
+
+        eps_a = float(reader('eps_a', matched_specs))
+        r0_step = float(reader('r0', matched_specs))
+
+        r_eval = np.clip(self.s, r0_step, 1.0)
+        shaf_arr, _, _ = reader.get_shaf(matched_specs, r=r_eval)
+        shift_norm = -np.asarray(shaf_arr, dtype=float) * eps_a**3   # Δ/R0
+        shift_norm -= shift_norm[-1]                                  # zero at s=1
+
+        R0_boundary = self.R0[-1]
+        R0_pluto = R0_boundary + shift_norm * R0_boundary
+
+        R0v = R0_pluto[:, np.newaxis]
+        r  = self.r[:, np.newaxis]
+        if simple:
+            R = R0v + r * np.cos(theta)
+            Z = r   * np.sin(theta)
+        else:
+            S2 = self.S2[:, np.newaxis]
+            S3 = self.S3[:, np.newaxis]
+            R = R0v + (r + S2) * np.cos(theta) + S3 * np.cos(2 * theta)
+            Z =       (r - S2) * np.sin(theta)
         return R, Z
 
     def get_mode(self, coeff, m, n=0):
@@ -454,9 +538,10 @@ def fit_shaping_scan(npz_paths, s_index=None, s_value=None, degree=4, plot=True,
         Flux-surface array index at which to evaluate shaping quantities.
         Mutually exclusive with s_value.
     s_value : float, optional
-        Normalised flux label s ∈ [0, 1]. The nearest grid point is found
-        from the 's' array in the first NPZ file. Mutually exclusive with
-        s_index. Default (when both are None): s_value = 0.5.
+        Radial label from the NPZ 's' array, which is sqrt(phi/phi_edge) ≈ r/a
+        (vmecReader convention). The nearest grid point is used. Mutually
+        exclusive with s_index. The step-model radius r0 = 0.5 corresponds
+        to s_value = 0.5. Default (when both are None): s_value = 0.5.
     degree : int
         Polynomial degree in M (default 4).
     plot : bool
@@ -492,6 +577,7 @@ def fit_shaping_scan(npz_paths, s_index=None, s_value=None, degree=4, plot=True,
 
     # --- resolve flux-surface index ---
     if s_index is None:
+        # npz 's' = sqrt(phi/phi_edge) ≈ r/a, so 0.5 matches the step-model r0
         target_s = s_value if s_value is not None else 0.5
         s_arr = records[0][1]['s'] if 's' in records[0][1] else None
         if s_arr is not None:
@@ -584,8 +670,9 @@ def fit_venus_dshafdr(h5_paths, s_value=0.5, degree=4, plot=True, outpath=None):
     fit as a polynomial in on-axis Mach number, and optionally save.
 
     The derivative is computed by numerical differentiation of the R_mid
-    profile (as in plot_shafranov_vs_mach) and chain-rule conversion from s
-    to r: dΔ/dr = dΔ/ds · 2r, where s = (r/a)².
+    profile (as in plot_shafranov_vs_mach) with respect to the VENUS grid
+    coordinate S, which is already √(VMEC flux) ≈ r/a (SATIRE2SFL uses
+    s = sqrt(s2)), so no chain-rule conversion is applied.
 
     The output NPZ uses the same key convention as fit_shaping_scan
     ('dshafdr_coeffs', 'dshafdr_perr'), so it can be merged into an existing
@@ -598,8 +685,8 @@ def fit_venus_dshafdr(h5_paths, s_value=0.5, degree=4, plot=True, outpath=None):
     h5_paths : list of str or Path
         VENUS stability h5 files (one per Mach point).
     s_value : float
-        Flux-surface label s at which to evaluate dΔ/dr.  Default 0.5
-        (matches r0 = 0.5 in the step model).
+        VENUS grid coordinate S (≈ r/a) at which to evaluate dΔ/dr.
+        Default 0.5 (matches r0 = 0.5 in the step model).
     degree : int
         Polynomial degree in M (default 4).
     plot : bool
@@ -627,10 +714,10 @@ def fit_venus_dshafdr(h5_paths, s_value=0.5, degree=4, plot=True, outpath=None):
         M0  = np.sqrt(max(M02, 0.0))
         idx = _nearest_idx(s_v, s_value)
         R_mid   = (R.max(axis=0) + R.min(axis=0)) / 2
-        shift_p = R_mid - float(R_mid[-1])          # Δ(s)/R0, 0 at boundary
+        shift_p = R_mid - float(R_mid[-1])          # Δ(S)/R0, 0 at boundary
+        # S is already ≈ r/a, so d/dS is d/d(r/a) directly
         dds     = np.gradient(shift_p, s_v)
-        r_idx   = np.sqrt(max(float(s_v[idx]), 1e-10))
-        records.append((M0, float(dds[idx]) * 2 * r_idx))
+        records.append((M0, float(dds[idx])))
 
     if not records:
         print("fit_venus_dshafdr: no files loaded")
@@ -708,13 +795,16 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
     is stored in the shaping NPZ (maximum at axis, zero at boundary),
     and ε(s) = a(s)/R₀(s) from the Fourier m=0,1 coefficients.
 
+    All radial labels here use the sqrt-flux convention: the VMEC npz 's'
+    (= sqrt(phi/phi_edge)), the VENUS grid 'S', and PlutoMHD's r are all ≈ r/a,
+    so s_value = r0 evaluates every source at the same surface.
+
     For PlutoMHD, the analytic Shafranov shift from plutorlstab.shaf() is evaluated at
-    r = sqrt(s_value) (using s ≈ (r/a)² for circular surfaces) and normalised as
-    Δ/R₀ = -shaf(r) * eps_a³.
+    r = s_value and normalised as Δ/R₀ = -shaf(r) * eps_a³.
 
     The derivative Δ' = d(Δ/R₀)/d(r/a) is obtained for VMEC and VENUS by numerical
-    differentiation of the shift profile followed by chain-rule conversion from s to r
-    (dΔ/dr = dΔ/ds · 2r).  For PlutoMHD, dshafdr from shaf() is used directly,
+    differentiation of the shift profile with respect to the (≈ r/a) grid; no
+    chain-rule factor is needed.  For PlutoMHD, dshafdr from shaf() is used directly,
     normalised as Δ' = dshafdr · eps_a³.
 
     VMEC and VENUS use different radial grids (different resolution and bunching),
@@ -843,6 +933,7 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
                 M02  = float(f['normalisation']['M02'][()])
                 s_v  = f['Grid']['S'][()]          # VENUS radial grid, shape (Nsurf,)
                 R    = f['geometry']['R'][()]       # shape (Ntheta, Nsurf), normalised by R0
+            # VENUS S is √(VMEC flux) ≈ r/a, same convention as s_eff
             idx = _nearest_idx(s_v, s_eff) if s_eff is not None else -1
             R_axis_n   = float(R[:, 0].mean())                        # normalised R₀ reference (≈1 in VENUS units)
             R_col_n    = R[:, idx]                                     # normalised R at chosen surface
@@ -853,12 +944,11 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             # R_center_n − R_edge_n = Δ(s)/R0 (shift at s relative to boundary)
             shifts_h.append(R_center_n - R_edge_n)
             epssq_h.append(eps_venus**2)
-            # Δ' = d(Δ/R0)/d(r/a); compute full R_mid profile then differentiate
+            # Δ' = d(Δ/R0)/d(r/a); S is already ≈ r/a so d/dS needs no chain rule
             R_mid_profile = (R.max(axis=0) + R.min(axis=0)) / 2
             shift_profile_h = R_mid_profile - float(R_mid_profile[-1])
             dshift_ds_h = np.gradient(shift_profile_h, s_v)
-            r_at_idx_h = np.sqrt(max(float(s_v[idx]), 1e-10))
-            dshifts_h.append(float(dshift_ds_h[idx]) * 2 * r_at_idx_h)
+            dshifts_h.append(float(dshift_ds_h[idx]))
         if machs_h:
             order = np.argsort(machs_h)
             machs_h   = np.array(machs_h)[order]
@@ -866,7 +956,7 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
             epssq_h   = np.array(epssq_h)[order]
             dshifts_h = np.array(dshifts_h)[order]
             ax.plot(machs_h, shifts_h, 's-',  label=r'VENUS $\Delta/R_0$')
-            ax.plot(machs_h, epssq_h,  's--', label=r'VENUS $\varepsilon^2$')
+            # ax.plot(machs_h, epssq_h,  's--', label=r'VENUS $\varepsilon^2$')
             if show_dprime and ax2 is not None:
                 ax2.plot(machs_h, dshifts_h, 's-', label=r"VENUS $\Delta'$")
             print(f"VENUS: {len(machs_h)} points, "
@@ -895,7 +985,8 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
         if r0_eff is not None:
             r_eval = np.array([r0_eff])
         elif s_value is not None:
-            r_eval = np.array([np.sqrt(s_value)])
+            # s_value is in the sqrt-flux ≈ r/a convention, same as r0
+            r_eval = np.array([s_value])
         else:
             r_eval = np.array([1.0])
 
@@ -926,12 +1017,14 @@ def plot_shafranov_vs_mach(vmec_npz_paths=None, venus_h5_paths=None,
                   f"Δ/R₀ ∈ [{shifts_p.min():.4f}, {shifts_p.max():.4f}]")
 
     ax.set_xlabel(r'$\mathcal{M}$')
-    ax.set_ylabel(r'$\Delta/R_0,\ \varepsilon^2$')
+    # ax.set_ylabel(r'$\Delta/R_0,\ \varepsilon^2$')
+    ax.set_ylabel(r'$\Delta/R_0$')
     ax.set_title(f'Shafranov shift vs Mach  ({s_label})')
     ax.legend()
     if show_dprime and ax2 is not None:
         ax2.set_xlabel(r'$\mathcal{M}$')
-        ax2.set_ylabel(r"$\Delta' = \mathrm{d}(\Delta/R_0)/\mathrm{d}(r/a)$")
+        # ax2.set_ylabel(r"$\Delta' = \mathrm{d}(\Delta/R_0)/\mathrm{d}(r/a)$")
+        ax2.set_ylabel(r"$\epsilon_a\mathrm{d}(\Delta)/\mathrm{d}r$")
         ax2.set_title(f"Shafranov shift derivative vs Mach  ({s_label})")
         ax2.legend()
     fig.tight_layout()
